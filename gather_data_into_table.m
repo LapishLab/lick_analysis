@@ -19,6 +19,7 @@ licks_file = dir([f, 'licks_*.csv']).name;
 licks = readtable([f, licks_file]);
 exp.licks_L = get_licks_for_sippers(exp.sipper_L, licks);
 exp.licks_R = get_licks_for_sippers(exp.sipper_R, licks);
+check_for_unexpected_sippers([exp.sipper_R; exp.sipper_L], licks);
 exp.day(:) = string(folder);
 end
 
@@ -37,17 +38,25 @@ end
 function sanity_check_lick_times(start,stop, sipper)
     sipper = string(sipper);
     if length(start) ~= length(stop)
-         error("unequal number of lick starts and stops for sipper " + sipper)
+        error("unequal number of lick starts and stops for sipper " + sipper)
     end
-
+    
     duration = stop - start;
     if any(duration<0)
         warning("negative lick duration computer for sipper " + sipper)
     end
-
+    
     max_d = max(duration);
     if max_d>1000
         d = string(max_d);
         warning("suspiciously long lick duration ("+d+") detected for " + sipper)
     end
+end
+
+function check_for_unexpected_sippers(expected_sippers, licks)
+unexpected = ~any(expected_sippers == licks.sipper_id');
+if any(unexpected)
+    unexpected_id = unique(licks.sipper_id(unexpected));
+    warning("licks recorded for sipper ID not listed in experiment sheet " +   mat2str(unexpected_id))
+end
 end
