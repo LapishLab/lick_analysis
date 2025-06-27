@@ -1,16 +1,4 @@
-clear
-folders = dir();
-folders = folders(3:end, :);
-
-exp_table = table();
-
-for ind = 1:height(folders)
-    csv_name = string(folders(ind).name) + filesep + 'experiment_structure.csv';
-    day_table = readtable(csv_name);
-    day_table.day(:) = ind;
-    exp_table = cat(1, exp_table, day_table);
-
-end
+load("all_days.mat")
 
 %% get lick vs no lick data
 exp_table = sortrows(exp_table,"day","ascend");
