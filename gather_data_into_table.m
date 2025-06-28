@@ -32,6 +32,7 @@ for ind = 1:length(sippers)
     stop = licks.timestamp(is_sipper & ~is_start);
     sanity_check_lick_times(start,stop, sippers(ind))
     sorted_licks{ind} = table(start, stop);
+    sorted_licks{ind} = set_first_lick_as_start(sorted_licks{ind});
 end
 end
 
@@ -58,5 +59,12 @@ unexpected = ~any(expected_sippers == licks.sipper_id');
 if any(unexpected)
     unexpected_id = unique(licks.sipper_id(unexpected));
     warning("licks recorded for sipper ID not listed in experiment sheet " +   mat2str(unexpected_id))
+end
+end
+
+function licks = set_first_lick_as_start(licks)
+if height(licks)>0
+    start_time = licks{1,1};
+    licks = licks(2:end,:) - start_time;
 end
 end
