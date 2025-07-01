@@ -20,7 +20,23 @@ with_lickometer = exp_table.consumed_R(has_lickometer);
 errbar_with_raw_data({no_lickometer, with_lickometer}, ...
     ["No lickometer", "With lickometer"])
 ylabel('Volume consumed (ml)')
-exportgraphics(gca,['figures', filesep, 'f2_consumption.svg'])
+title('Ethanol bottle')
+exportgraphics(gca,['figures', filesep, 'f2_ethanol_consumption.svg'])
+
+[~, p] = ttest(no_lickometer, with_lickometer)
+
+%% Plot bar graph of water volume consumed
+f = figure(theme="light"); clf; hold on;
+f.Position = [100 100 400 400];
+
+no_lickometer = exp_table.consumed_L(~has_lickometer);
+with_lickometer = exp_table.consumed_L(has_lickometer);
+
+errbar_with_raw_data({no_lickometer, with_lickometer}, ...
+    ["No lickometer", "With lickometer"])
+ylabel('Volume consumed (ml)')
+title('water bottle')
+exportgraphics(gca,['figures', filesep, 'f2_water_consumption.svg'])
 
 [~, p] = ttest(no_lickometer, with_lickometer)
 
