@@ -4,35 +4,42 @@ load("all_days.mat")
 exp_table = sortrows(exp_table,"day","ascend");
 exp_table = sortrows(exp_table,"rat_id","ascend");
 
-has_lickometer = exp_table.lickometer == 1;
-no_lickometer = exp_table.lickometer == 0;    
-
-data_with_lickometer = exp_table.consumed_R(has_lickometer);
-data_without_lickometer = exp_table.consumed_R(no_lickometer);
-
-if any(~(exp_table.rat_id(has_lickometer) == exp_table.rat_id(no_lickometer)))
+has_lickometer = exp_table.lickometer == 1;  
+if any(~(exp_table.rat_id(has_lickometer) == exp_table.rat_id(~has_lickometer)))
     warning("This design isn't properly counterbalanced or sorted for paired t-test")
 end
 
-%% calculate the mean and standard error of ethanol consumed for each group
-mean_with_lickometer = mean(data_with_lickometer);
-mean_without_lickometer = mean(data_without_lickometer);
-se_with_lickometer = sem(data_with_lickometer);
-se_without_lickometer = sem(data_without_lickometer);
-y = [mean_with_lickometer, mean_without_lickometer];
-error = [se_with_lickometer, se_without_lickometer];
-%% create error bar graph with standard error lines
-f = figure(1); clf; hold on;
-f.Position = [100 100 540 400];
-bar(["lickometer", "no lickometer"], y)
-errorbar(y,error, 'LineStyle', 'none')
-scatter(1, data_with_lickometer, 'filled', 'b')
-scatter(2, data_without_lickometer, 'filled', 'r')
 
-[~, p] = ttest(data_with_lickometer,data_without_lickometer)
+%% Plot bar graph of ethanol volume consumed
+f = figure(theme="light"); clf; hold on;
+f.Position = [100 100 400 400];
 
-ax = gca;
-exportgraphics(ax,['figures', filesep, 'f2_consumption.svg'])
+no_lickometer = exp_table.consumed_R(~has_lickometer);
+with_lickometer = exp_table.consumed_R(has_lickometer);
+
+errbar_with_raw_data({no_lickometer, with_lickometer}, ...
+    ["No lickometer", "With lickometer"])
+ylabel('Volume consumed (ml)')
+exportgraphics(gca,['figures', filesep, 'f2_consumption.svg'])
+
+[~, p] = ttest(no_lickometer, with_lickometer)
 
 
 
+function errbar_with_raw_data(data, labels)
+% data = cell array of raw data in each group
+% string labels for each group (x-axis of bar graph)
+
+avg = cellfun(@mean, data);
+err = cellfun(@sem, data);
+
+bar(labels, avg)
+errorbar(avg,err, 'k', 'LineStyle', 'none', 'CapSize',50,'LineWidth',2)
+
+jiggle_scale = .4;
+for i=1:length(data)
+    y = data{i};
+    x = i + jiggle_scale*(rand(size(y))-0.5);
+    scatter(x,y, 'filled', 'k')
+end
+end
