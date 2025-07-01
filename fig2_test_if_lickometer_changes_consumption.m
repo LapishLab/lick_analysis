@@ -22,10 +22,14 @@ se_without_lickometer = std(data_without_lickometer) / sqrt(length(data_without_
 y = [mean_with_lickometer, mean_without_lickometer];
 error = [se_with_lickometer, se_without_lickometer];
 %% create error bar graph with standard error lines
-figure(1); clf; hold on;
+f = figure(1); clf; hold on;
+f.Position = [100 100 540 400];
 bar(["lickometer", "no lickometer"], y)
 errorbar(y,error, 'LineStyle', 'none')
 scatter(1, data_with_lickometer, 'filled', 'b')
 scatter(2, data_without_lickometer, 'filled', 'r')
 
 [~, p] = ttest(data_with_lickometer,data_without_lickometer)
+
+ax = gca;
+exportgraphics(ax,['figures', filesep, 'f2_consumption.svg'])
