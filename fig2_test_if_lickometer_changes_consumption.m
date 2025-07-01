@@ -17,8 +17,8 @@ end
 %% calculate the mean and standard error of ethanol consumed for each group
 mean_with_lickometer = mean(data_with_lickometer);
 mean_without_lickometer = mean(data_without_lickometer);
-se_with_lickometer = std(data_with_lickometer) / sqrt(length(data_with_lickometer));
-se_without_lickometer = std(data_without_lickometer) / sqrt(length(data_without_lickometer));
+se_with_lickometer = sem(data_with_lickometer);
+se_without_lickometer = sem(data_without_lickometer);
 y = [mean_with_lickometer, mean_without_lickometer];
 error = [se_with_lickometer, se_without_lickometer];
 %% create error bar graph with standard error lines
@@ -33,3 +33,6 @@ scatter(2, data_without_lickometer, 'filled', 'r')
 
 ax = gca;
 exportgraphics(ax,['figures', filesep, 'f2_consumption.svg'])
+
+
+
