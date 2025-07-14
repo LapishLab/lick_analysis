@@ -1,20 +1,15 @@
 clear
 load("all_days.mat")
-exp_table = exp_table(exp_table.lickometer==1, :);
-is_male = exp_table.sex=="M";
-exp_table.num_licks_R = cellfun(@height, exp_table.licks_R);
-exp_table.num_licks_L = cellfun(@height, exp_table.licks_L);
+exp_table.num_licks = cellfun(@height, exp_table.licks);
 %% Scatter licks vs. ethanol consumed
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 400 400];
 
-x = exp_table.num_licks_R(is_male);
-y = exp_table.consumed_R(is_male);
-scatter(x, y , 'filled')
+t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'water'},{'sex','M'});
+scatter(t.num_licks, t.consumed, 'filled')
 
-x = exp_table.num_licks_R(~is_male);
-y = exp_table.consumed_R(~is_male);
-scatter(x, y , 'filled')
+t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'water'},{'sex','F'});
+scatter(t.num_licks, t.consumed, 'filled')
 
 xlabel('Total licks')
 ylabel('Volume consumed (ml)')
@@ -26,13 +21,11 @@ exportgraphics(gca,['figures', filesep, 'f3_ethanol_licks.svg'])
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 400 400];
 
-x = exp_table.num_licks_L(is_male);
-y = exp_table.consumed_L(is_male);
-scatter(x, y , 'filled')
+t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'ethanol'},{'sex','M'});
+scatter(t.num_licks, t.consumed, 'filled')
 
-x = exp_table.num_licks_L(~is_male);
-y = exp_table.consumed_L(~is_male);
-scatter(x, y , 'filled')
+t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'ethanol'},{'sex','F'});
+scatter(t.num_licks, t.consumed, 'filled')
 
 xlabel('Total licks')
 ylabel('Volume consumed (ml)')
