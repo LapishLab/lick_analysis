@@ -1,7 +1,7 @@
 load("all_days.mat")
 
 %% get ethanol consumption
-eth = sub_table(exp_table, 'fluid', 'ethanol');
+eth = sub_table(exp_table, {'fluid', 'ethanol'});
 e_consumption = consumption_split_by_lickometer(eth);
 
 %% Plot bar graph of ethanol volume consumed
@@ -17,7 +17,7 @@ exportgraphics(gca,['figures', filesep, 'f2_ethanol_consumption.svg'])
 
 
 %% get water consumption
-wat = sub_table(exp_table, 'fluid', 'water');
+wat = sub_table(exp_table, {'fluid', 'water'});
 w_consumption = consumption_split_by_lickometer(wat);
 
 %% Plot bar graph of water volume consumed
