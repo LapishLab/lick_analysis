@@ -5,18 +5,20 @@ folders = folders([folders.isdir]); % only include directories
 
 exp_table = table();
 for ind = 1:height(folders)
-    day_table = load_exp_and_licks(folders(ind).name);
-    exp_table = cat(1, exp_table, day_table);
+    try
+        day_table = load_exp_and_licks(folders(ind).name);
+        exp_table = cat(1, exp_table, day_table);
+    catch exception
+        warning(exception.identifier,'%s \n', exception.message)
+        warning('skipping: %s\n', folders(ind).name);
+    end
 end
 
 save('all_days.mat',"exp_table")
 
 function exp = load_exp_and_licks(folder)
-f = [folder, filesep];
-exp = readtable([f, 'experiment_structure.csv']);
-
-licks_file = dir([f, 'licks_*.csv']).name;
-licks = readtable([f, licks_file]);
+exp = load_exp(folder);
+licks = load_licks(folder);
 exp.licks_L = get_licks_for_sippers(exp.sipper_L, licks);
 exp.licks_R = get_licks_for_sippers(exp.sipper_R, licks);
 check_for_unexpected_sippers([exp.sipper_R; exp.sipper_L], licks);
@@ -67,4 +69,29 @@ if height(licks)>0
     start_time = licks{1,1};
     licks = licks(2:end,:) - start_time;
 end
+end
+
+
+function exp = load_exp(folder)
+    names = {dir(folder).name};
+    
+    is_exp = strcmp(names, 'experiment_structure.csv');
+    if sum(is_exp) == 1
+        f_name = [folder, filesep, names{is_exp}];
+        exp = readtable(f_name);
+    else
+        error(['Unexpected number of experiment_structure.csv files in ', folder]);
+    end
+end
+
+function licks = load_licks(folder)
+    names = {dir(folder).name};
+    
+    is_licks = contains(names, 'licks_');
+    if sum(is_licks) == 1
+        f_name = [folder, filesep, names{is_licks}];
+        licks = readtable(f_name);
+    else
+        error(['Unexpected number of licks_* files in ', folder]);
+    end
 end
