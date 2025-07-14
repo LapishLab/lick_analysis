@@ -1,3 +1,4 @@
+function t = sub_table(full_table, varargin)
     is_match = true(height(full_table),1);
     for i=1:length(varargin)
         column = varargin{i}{1};
