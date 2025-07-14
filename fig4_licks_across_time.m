@@ -1,8 +1,6 @@
 clear
 load("all_days.mat")
 exp_table = exp_table(exp_table.lickometer==1, :);
-is_male = exp_table.sex=="M";
-is_P = exp_table.strain=="P";
 size = [600, 300];
 %% bin licks
 max_t = 60*60*1000;
@@ -10,13 +8,14 @@ bin_size = 1000 * 100;
 
 edges = 0:bin_size:max_t;
 x_time = (edges(2:end) - diff(edges(1:2))/2)/ 1000; % time in seconds
-lick_rate_ethanol = bin_licks(exp_table.licks_R, edges);
-lick_rate_water = bin_licks(exp_table.licks_L, edges);
+lick_rate = bin_licks(exp_table.licks, edges);
 %% Lick rate across time ethanol vs. water
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 size];
-shadedErrorBar(x_time,lick_rate_ethanol,{@mean,@sem}, 'lineProps', 'b');
-shadedErrorBar(x_time,lick_rate_water,{@mean,@sem}, 'lineProps', 'r');
+eth = lick_rate(strcmp(exp_table.fluid, 'ethanol'), :);
+wat = lick_rate(strcmp(exp_table.fluid, 'water'), :);
+shadedErrorBar(x_time,eth,{@mean,@sem}, 'lineProps', 'b');
+shadedErrorBar(x_time,wat,{@mean,@sem}, 'lineProps', 'r');
 xlabel('Time (s)')
 ylabel('Lick rate (Hz)')
 legend("ethanol", "water")
@@ -25,8 +24,12 @@ exportgraphics(gca,['figures', filesep, 'f4_ethanol_vs_water.svg'])
 %% Ethanol Lick rate across time P vs. Wistar
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 size];
-shadedErrorBar(x_time,lick_rate_ethanol(~is_P,:),{@mean,@sem}, 'lineProps', 'b');
-shadedErrorBar(x_time,lick_rate_ethanol(is_P,:),{@mean,@sem}, 'lineProps', 'r');
+is_eth = strcmp(exp_table.fluid, 'ethanol');
+is_P = exp_table.strain=="P";
+is_Wis = exp_table.strain=="W";
+
+shadedErrorBar(x_time,lick_rate(is_Wis & is_eth,:),{@mean,@sem}, 'lineProps', 'b');
+shadedErrorBar(x_time,lick_rate(is_P & is_eth,:),{@mean,@sem}, 'lineProps', 'r');
 xlabel('Time (s)')
 ylabel('Lick rate (Hz)')
 legend("Wistar", "P")
@@ -35,8 +38,10 @@ exportgraphics(gca,['figures', filesep, 'f4_P_vs_Wistart_for_ethanol.svg'])
 %% Ethanol Lick rate across time Male vs Female
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 size];
-shadedErrorBar(x_time,lick_rate_ethanol(~is_male,:),{@mean,@sem}, 'lineProps', 'b');
-shadedErrorBar(x_time,lick_rate_ethanol(is_male,:),{@mean,@sem}, 'lineProps', 'r');
+is_male = exp_table.sex=="M";
+is_female = exp_table.sex=="F";
+shadedErrorBar(x_time,lick_rate(is_female & is_eth,:),{@mean,@sem}, 'lineProps', 'b');
+shadedErrorBar(x_time,lick_rate(is_male & is_eth,:),{@mean,@sem}, 'lineProps', 'r');
 xlabel('Time (s)')
 ylabel('Lick rate (Hz)')
 legend("Female", "Male")
