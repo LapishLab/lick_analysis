@@ -19,9 +19,8 @@ save('all_days.mat',"exp_table")
 function exp = load_exp_and_licks(folder)
 exp = load_exp(folder);
 licks = load_licks(folder);
-exp.licks_L = get_licks_for_sippers(exp.sipper_L, licks);
-exp.licks_R = get_licks_for_sippers(exp.sipper_R, licks);
-check_for_unexpected_sippers([exp.sipper_R; exp.sipper_L], licks);
+exp.licks = get_licks_for_sippers(exp.sipper, licks);
+check_for_unexpected_sippers(exp.sipper, licks);
 exp.day(:) = string(folder);
 end
 
