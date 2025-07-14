@@ -1,53 +1,42 @@
 load("all_days.mat")
 
-%% get lick vs no lick data
-exp_table = sortrows(exp_table,"day","ascend");
-exp_table = sortrows(exp_table,"rat_id","ascend");
-
-has_lickometer = exp_table.lickometer == 1;  
-if any(~(exp_table.rat_id(has_lickometer) == exp_table.rat_id(~has_lickometer)))
-    warning("This design isn't properly counterbalanced or sorted for paired t-test")
-end
-
+%% get ethanol consumption
+eth = sub_table(exp_table, 'fluid', 'ethanol');
+e_consumption = consumption_split_by_lickometer(eth);
 
 %% Plot bar graph of ethanol volume consumed
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 400 400];
 
-no_lickometer = exp_table.consumed_R(~has_lickometer);
-with_lickometer = exp_table.consumed_R(has_lickometer);
-
-errbar_with_raw_data({no_lickometer, with_lickometer}, ...
-    ["No lickometer", "With lickometer"])
+errbar_with_raw_data(e_consumption, ["No lickometer", "With lickometer"])
 ylabel('Volume consumed (ml)')
 title('Ethanol bottle')
 exportgraphics(gca,['figures', filesep, 'f2_ethanol_consumption.svg'])
 
-[~, p] = ttest(no_lickometer, with_lickometer)
+[~, p] = ttest(e_consumption(:,1), e_consumption(:,2));
+
+
+%% get water consumption
+wat = sub_table(exp_table, 'fluid', 'water');
+w_consumption = consumption_split_by_lickometer(wat);
 
 %% Plot bar graph of water volume consumed
 f = figure(theme="light"); clf; hold on;
 f.Position = [100 100 400 400];
 
-no_lickometer = exp_table.consumed_L(~has_lickometer);
-with_lickometer = exp_table.consumed_L(has_lickometer);
-
-errbar_with_raw_data({no_lickometer, with_lickometer}, ...
-    ["No lickometer", "With lickometer"])
+errbar_with_raw_data(w_consumption, ["No lickometer", "With lickometer"])
 ylabel('Volume consumed (ml)')
 title('water bottle')
 exportgraphics(gca,['figures', filesep, 'f2_water_consumption.svg'])
 
-[~, p] = ttest(no_lickometer, with_lickometer)
-
-
+[~, p] = ttest(w_consumption(:,1), w_consumption(:,2))
 
 function errbar_with_raw_data(data, labels)
-% data = cell array of raw data in each group
+% data = table or matrix with each column being different dataset
 % string labels for each group (x-axis of bar graph)
 
-avg = cellfun(@mean, data);
-err = cellfun(@sem, data);
+avg = mean(data);
+err = std(data);
 
 bar(labels, avg)
 errorbar(avg,err, 'k', 'LineStyle', 'none', 'CapSize',50,'LineWidth',2)
@@ -59,3 +48,27 @@ for i=1:length(data)
     scatter(x,y, 'filled', 'k')
 end
 end
+
+function vol = consumption_per_rat(rat_ids, exp)
+    vol = nan(size(rat_ids));
+    for i=1:length(rat_ids)
+        c = exp.consumed(rat_ids(i)==exp.rat_id);
+        vol(i) = mean(c);
+    end
+
+end
+
+function consumption = consumption_split_by_lickometer(exp)
+    rat_ids = unique(exp.rat_id);
+    rat_ids(isnan(rat_ids)) = [];
+
+    has_lickometer = exp.lickometer == 1;
+
+    l = consumption_per_rat(rat_ids, exp(has_lickometer,:));
+    n = consumption_per_rat(rat_ids, exp(~has_lickometer,:));
+
+    consumption = table();
+    consumption.lick = l;
+    consumption.no_lick = n;
+end
+
