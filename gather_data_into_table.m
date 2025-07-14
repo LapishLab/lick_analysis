@@ -31,16 +31,17 @@ for ind = 1:length(sippers)
     is_start = logical(licks.state);
     start = licks.timestamp(is_sipper & is_start);
     stop = licks.timestamp(is_sipper & ~is_start);
-    sanity_check_lick_times(start,stop, sippers(ind))
+    [start,stop] = sanity_check_lick_times(start,stop, sippers(ind));
     sorted_licks{ind} = table(start, stop);
     sorted_licks{ind} = set_first_lick_as_start(sorted_licks{ind});
 end
 end
 
-function sanity_check_lick_times(start,stop, sipper)
+function [start,stop] = sanity_check_lick_times(start,stop, sipper)
     sipper = string(sipper);
-    if length(start) ~= length(stop)
-        error("unequal number of lick starts and stops for sipper " + sipper)
+    if length(start) > length(stop)
+        warning("more starts than stops. Throwing out last start")
+        start = start(1:end-1);
     end
     
     duration = stop - start;
