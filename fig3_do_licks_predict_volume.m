@@ -20,7 +20,7 @@ exportgraphics(gca,['figures', filesep, 'f3_ethanol_licks.svg'])
 
 %% Scatter licks vs. ethanol consumed
 f = figure(2); theme('light'); clf; hold on;
-f.Position = [80 80 fig_size];
+f.Position = [480 80 fig_size];
 
 t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'water'},{'sex','M'});
 scatter(t.num_licks, t.consumed, 'filled')
