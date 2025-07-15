@@ -48,6 +48,8 @@ jiggle_scale = .1;
 x_jiggle = jiggle_scale*(randn(size(x)));
 x = x + x_jiggle;
 scatter(x,data, 'filled', 'k')
+ylim([0, max(data(:))*1.1])
+
 end
 
 function vol = consumption_per_rat(rat_ids, exp)
