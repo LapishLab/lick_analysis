@@ -1,5 +1,7 @@
+clear
 load("all_days.mat")
 fig_size = [400,400];
+
 %% get ethanol consumption
 eth = sub_table(exp_table, {'fluid', 'ethanol'});
 e_consumption = consumption_split_by_lickometer(eth);
