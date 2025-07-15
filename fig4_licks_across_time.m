@@ -5,11 +5,11 @@ size = [400, 300];
 %% bin licks
 % max_t = 3*60*60*1000; % full 3 hours
 max_t = 30*60*1000; % first 30 minutes
-bin_size = 1000 * 100;
+bin_size = 1000 * 100; % bin size in ms
 
 edges = 0:bin_size:max_t;
 x_time = (edges(2:end) - diff(edges(1:2))/2)/ 1000 / 60; % time in seconds
-lick_rate = bin_licks(exp_table.licks, edges);
+lick_rate = bin_licks(exp_table.licks, edges) * 1000;
 %% Lick rate across time ethanol vs. water
 f = figure(1); theme('light'); clf; hold on;
 f.Position = [80 80 size];
