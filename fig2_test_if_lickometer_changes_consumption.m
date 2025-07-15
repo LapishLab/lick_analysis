@@ -37,7 +37,7 @@ function errbar_with_raw_data(data, labels)
 % string labels for each group (x-axis of bar graph)
 data = table2array(data);
 avg = mean(data);
-err = std(data);
+err = sem(data);
 
 bar(labels, avg)
 errorbar(avg,err, 'k', 'LineStyle', 'none', 'CapSize',50,'LineWidth',2)
