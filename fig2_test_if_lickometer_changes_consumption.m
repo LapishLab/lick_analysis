@@ -34,7 +34,6 @@ function errbar_with_raw_data(data, labels)
 % data = table or matrix with each column being different dataset
 % string labels for each group (x-axis of bar graph)
 data = table2array(data);
-data(isnan(data)) = 0;
 avg = mean(data);
 err = std(data);
 
@@ -73,5 +72,7 @@ function consumption = consumption_split_by_lickometer(exp)
     consumption = table();
     consumption.lick = l;
     consumption.no_lick = n;
+
+    consumption = rmmissing(consumption);
 end
 
