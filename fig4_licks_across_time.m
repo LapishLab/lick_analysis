@@ -48,6 +48,25 @@ legend("Female", "Male")
 
 exportgraphics(gca,['figures', filesep, 'f4_M_vs_F_for_ethanol.svg'])
 
+%% Ethanol Lick rate for each day
+f = figure(theme="light"); clf; hold on;
+f.Position = [100 100 size];
+
+is_day = exp_table.day == "day1";
+shadedErrorBar(x_time,lick_rate(is_eth & is_day,:),{@mean,@sem}, 'lineProps', 'b');
+is_day = exp_table.day == "day2";
+shadedErrorBar(x_time,lick_rate(is_eth & is_day,:),{@mean,@sem}, 'lineProps', 'r');
+is_day = exp_table.day == "day3";
+shadedErrorBar(x_time,lick_rate(is_eth & is_day,:),{@mean,@sem}, 'lineProps', 'g');
+is_day = exp_table.day == "day4";
+shadedErrorBar(x_time,lick_rate(is_eth & is_day,:),{@mean,@sem}, 'lineProps', 'k');
+
+xlabel('Time (s)')
+ylabel('Lick rate (Hz)')
+legend("day 1", "day 2", "day 3", "day 4")
+
+exportgraphics(gca,['figures', filesep, 'f4_by_day_for_ethanol.svg'])
+
 
 %%
 
