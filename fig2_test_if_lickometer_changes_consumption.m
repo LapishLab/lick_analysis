@@ -23,7 +23,7 @@ w_consumption = consumption_split_by_lickometer(wat);
 
 %% Plot bar graph of water volume consumed
 f = figure(2); theme('light'); clf; hold on;
-f.Position = [80 80 fig_size];
+f.Position = [480 80 fig_size];
 
 errbar_with_raw_data(w_consumption, ["No lick detector", "With lick detector"])
 ylabel('Volume consumed (ml)')
@@ -31,6 +31,21 @@ title('Water')
 exportgraphics(gca,['figures', filesep, 'f2_water_consumption.svg'])
 
 % [~, p] = ttest(w_consumption(:,1), w_consumption(:,2))
+
+%% Plot bar graph of consumption percentage with lickometer
+f = figure(3); theme('light'); clf; hold on;
+f.Position = [880 80 fig_size];
+difference = table();
+difference.water = (w_consumption.lick - w_consumption.no_lick);
+difference.ethanol = (e_consumption.lick - e_consumption.no_lick);
+errbar_with_raw_data(difference, ["Water", "10% Ethanol"])
+ylabel('Consumption difference with lick detector (ml)')
+title('Consumption change per rat')
+ylim([min(difference{:,:}, [], 'all'), max(difference{:,:}, [], 'all')])
+exportgraphics(gca,['figures', filesep, 'f2_diff_consumption.svg'])
+
+
+%%
 
 function errbar_with_raw_data(data, labels)
 % data = table or matrix with each column being different dataset
