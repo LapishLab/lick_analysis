@@ -2,34 +2,41 @@ clear
 fig_size = [400,400];
 load("all_days.mat")
 exp_table.num_licks = cellfun(@height, exp_table.licks);
+exp_table.lick_vol = exp_table.consumed ./ exp_table.num_licks *1000;
+exp_table = sub_table(exp_table, {'lickometer', 1});
+
+lightening = 1.5;
+water_color = [35, 37, 150] / 255 * lightening;
+eth_color = [4, 64, 15] / 255 * lightening;
 %% Scatter licks vs. ethanol consumed
 f = figure(1); theme('light'); clf; hold on;
 f.Position = [80 80 fig_size];
+sz = 25;
 
-t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'ethanol'},{'sex','M'});
-scatter(t.num_licks, t.consumed, 'filled')
+w = sub_table(exp_table, {'fluid', 'water'});
+scatter(w.num_licks, w.consumed, sz, water_color, 'filled')
 
-t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'ethanol'},{'sex','F'});
-scatter(t.num_licks, t.consumed, 'filled')
+e = sub_table(exp_table, {'fluid', 'ethanol'});
+scatter(e.num_licks, e.consumed, sz, eth_color, 'filled')
 
 xlabel('Total licks')
 ylabel('Volume consumed (ml)')
-title('10% Ethanol')
-legend("Male", "Female", Location="northwest")
+legend("Water", "10% ethanol", Location="best")
 exportgraphics(gca,['figures', filesep, 'f3_ethanol_licks.svg'])
 
 %% Scatter licks vs. ethanol consumed
 f = figure(2); theme('light'); clf; hold on;
 f.Position = [480 80 fig_size];
 
-t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'water'},{'sex','M'});
-scatter(t.num_licks, t.consumed, 'filled')
+edges = 0:1:35; % volume in uL
+edges = [edges, inf];
+histogram(exp_table.lick_vol, edges)
 
-t = sub_table(exp_table, {'lickometer', 1},{'fluid', 'water'},{'sex','F'});
-scatter(t.num_licks, t.consumed, 'filled')
+xlabel('Lick volume (uL)')
+ylabel('count')
 
-xlabel('Total licks')
-ylabel('Volume consumed (ml)')
-title('Water')
-legend("Male", "Female", Location="northwest")
-exportgraphics(gca,['figures', filesep, 'f3_water_licks.svg'])
+xline(2, '--')
+xline(25, '--')
+
+exportgraphics(gca,['figures', filesep, 'f3_ethanol_volumes.svg'])
+
