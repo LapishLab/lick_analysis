@@ -2,6 +2,13 @@ clear
 load("all_days.mat")
 exp_table = exp_table(exp_table.lickometer==1, :);
 size = [400, 300];
+%% restrict by lick volume
+thresh = [2, 25];
+num_licks = cellfun(@height, exp_table.licks);
+lick_vol = exp_table.consumed ./ num_licks *1000;
+is_good = lick_vol > thresh(1) & lick_vol < thresh(2);
+exp_table = exp_table(is_good, :);
+
 %% bin licks
 % max_t = 3*60*60*1000; % full 3 hours
 max_t = 30*60*1000; % first 30 minutes
@@ -12,7 +19,7 @@ x_time = (edges(2:end) - diff(edges(1:2))/2)/ 1000 / 60; % time in seconds
 lick_rate = bin_licks(exp_table.licks, edges) * 1000;
 %% Lick rate across time ethanol vs. water
 f = figure(1); theme('light'); clf; hold on;
-f.Position = [80 80 size];
+f.Position = [80 480 size];
 eth = lick_rate(strcmp(exp_table.fluid, 'ethanol'), :);
 wat = lick_rate(strcmp(exp_table.fluid, 'water'), :);
 shadedErrorBar(x_time,eth,{@mean,@sem}, 'lineProps', 'b');
@@ -24,7 +31,7 @@ legend("ethanol", "water")
 exportgraphics(gca,['figures', filesep, 'f4_ethanol_vs_water.svg'])
 %% Ethanol Lick rate across time P vs. Wistar
 f = figure(2); theme('light'); clf; hold on;
-f.Position = [120 120 size];
+f.Position = [480 80 size];
 is_eth = strcmp(exp_table.fluid, 'ethanol');
 is_P = exp_table.strain=="P";
 is_Wis = exp_table.strain=="W";
@@ -38,7 +45,7 @@ legend("Wistar", "P")
 exportgraphics(gca,['figures', filesep, 'f4_P_vs_Wistart_for_ethanol.svg'])
 %% Ethanol Lick rate across time Male vs Female
 f = figure(3); theme('light'); clf; hold on;
-f.Position = [160 160 size];
+f.Position = [80 80 size];
 is_male = exp_table.sex=="M";
 is_female = exp_table.sex=="F";
 shadedErrorBar(x_time,lick_rate(is_female & is_eth,:),{@mean,@sem}, 'lineProps', 'b');
@@ -51,7 +58,7 @@ exportgraphics(gca,['figures', filesep, 'f4_M_vs_F_for_ethanol.svg'])
 
 %% Ethanol Lick rate for each day
 f = figure(4); theme('light'); clf; hold on;
-f.Position = [200 200 size];
+f.Position = [480 480 size];
 
 is_day = exp_table.day == "day1";
 shadedErrorBar(x_time,lick_rate(is_eth & is_day,:),{@mean,@sem}, 'lineProps', 'b');
