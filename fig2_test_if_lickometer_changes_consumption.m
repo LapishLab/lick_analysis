@@ -14,11 +14,14 @@ e_consumption = consumption_split_by_lickometer(eth);
 consumption{2} = e_consumption;
 %% Plot bar graph of ethanol volume consumed
 f = figure(1); theme('light'); clf; hold on;
-fig_size = [500,400];
+fig_size = [1000, 600];
 f.Position = [80 80 fig_size];
 
-b = errbar_with_raw_data(consumption, ["Water", "10% ethanol"]);
-
+b = errbar_with_raw_data(consumption);
+l = ["Water", "10% ethanol"];
+xticks(1:length(l));
+xticklabels(l);
+xlim([.6,2.4])
 water_color = [35, 37, 150] / 255;
 eth_color = [4, 64, 15] / 255;
 lightening = 2.5;
@@ -29,8 +32,8 @@ b(2).CData(2,:) = eth_color; %lick_eth
 
 ylabel('Volume consumed (ml)')
 
-
-exportgraphics(gca,['figures', filesep, 'f2_ethanol_consumption.svg'])
+set(gca,'fontsize', 20) 
+exportgraphics(gca,['figures', filesep, 'f2_absolute_consumption.svg'])
 
 % [~, p] = ttest(e_consumption(:,1), e_consumption(:,2));
 
@@ -38,25 +41,25 @@ exportgraphics(gca,['figures', filesep, 'f2_ethanol_consumption.svg'])
 
 %% Plot bar graph of consumption percentage with lickometer
 f = figure(2); theme('light'); clf; hold on;
-fig_size = [300,400];
+fig_size = [400,600];
 f.Position = [480 80 fig_size];
 difference = table();
 difference.water = (w_consumption.lick - w_consumption.no_lick);
 difference.ethanol = (e_consumption.lick - e_consumption.no_lick);
-b = errbar_with_raw_data2({difference}, ["Water", "10% Ethanol"]);
+b = errbar_with_raw_data2({difference}, ["Water", "10% ethanol"]);
 
 b(1).CData(1,:) =  water_color * lightening/2; %no_lick_water
 b(1).CData(2,:)  = eth_color * lightening/2; % no_lick_eth
 
-ylabel('Consumption difference with lick detector (ml)')
+ylabel({'Consumption difference', 'with lick detector (ml)'})
 
 ylim(ylim*1.1)
+set(gca,'fontsize', 20) 
 exportgraphics(gca,['figures', filesep, 'f2_diff_consumption.svg'])
-
 
 %%
 
-function b = errbar_with_raw_data(data, labels)
+function b = errbar_with_raw_data(data)
 % data = table or matrix with each column being different dataset
 % string labels for each group (x-axis of bar graph)
 
@@ -68,7 +71,7 @@ for i=1:length(data)
     avg(i,:) = mean(d);
     err(i,:) = sem(d);
 end
-b = bar(labels, avg, 'FaceColor','flat');
+b = bar(avg, 'FaceColor','flat');
 
 x = cell2mat({b.XEndPoints}');
 avg = avg';
@@ -77,13 +80,16 @@ err = err';
 errorbar(x(:), avg(:), err(:), 'k', 'LineStyle', 'none', 'CapSize',20,'LineWidth',2)
 
 jiggle_scale = .02;
+alpha = 0.8;
 for r = 1:size(x,1)
     for c = 1:size(x,2)
         d = data{c}{:,r};
         bar_x = repmat(x(r,c), length(d), 1);
         bar_x = bar_x + jiggle_scale*(randn(size(bar_x)));
 
-        scatter(bar_x,d, 'filled', 'k')
+        s = scatter(bar_x,d, 'filled', 'k');
+        s.AlphaData = alpha * ones(length(d),1);
+        s.MarkerFaceAlpha = 'flat';
     end
 end
 
@@ -136,12 +142,14 @@ err = err';
 errorbar(x(:), avg(:), err(:), 'k', 'LineStyle', 'none', 'CapSize',20,'LineWidth',2)
 
 jiggle_scale = .1;
-
+alpha = 0.8;
 for c = 1:size(x,2)
     d = data{1}{:,c};
     bar_x = repmat(x(c), length(d), 1);
     bar_x = bar_x + jiggle_scale*(randn(size(bar_x)));
 
-    scatter(bar_x,d, 'filled', 'k')
+    s = scatter(bar_x,d, 'filled', 'k');
+    s.AlphaData = alpha * ones(length(d),1);
+    s.MarkerFaceAlpha = 'flat';
 end
 end

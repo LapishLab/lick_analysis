@@ -32,7 +32,11 @@ for ind = 1:length(sippers)
     start = licks.timestamp(is_sipper & is_start);
     stop = licks.timestamp(is_sipper & ~is_start);
     [start,stop] = sanity_check_lick_times(start,stop, sippers(ind));
-    sorted_licks{ind} = table(start, stop);
+    if isempty(start)
+        sorted_licks{ind} = table(stop, stop); % quick hack to deal with row / column empty issues from removing mismatched start with no stop
+    else
+        sorted_licks{ind} = table(start, stop);
+    end
     sorted_licks{ind} = set_first_lick_as_start(sorted_licks{ind});
 end
 end
