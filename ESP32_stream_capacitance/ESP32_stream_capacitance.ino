@@ -1,6 +1,7 @@
 // List of ESP32 touch-capable pins
-const int touchPins[] = {1,2,3,4,5,6,7,8,9}; //GPIO pin numbers, not TOUCH numbers
+const int touchPins[] = {1,6}; //GPIO pin numbers, not TOUCH numbers
 const int reading_delay = 10; //ms delay between readings  ## Values only seem to update every 10ms ##
+const int norm_val = 100;
 
 void setup() {
   Serial.begin(250000);
@@ -14,11 +15,11 @@ void setup() {
 const int numTouchPins = sizeof(touchPins) / sizeof(touchPins[0]);
 void loop() {
   for (int i=0; i<numTouchPins; i++){
-    int c = Serial.print(touchRead(touchPins[i]));
+    unsigned long c = touchRead(touchPins[i]) / norm_val;
     if (i < numTouchPins - 1) { 
-      Serial.printf("%i,", c); // print comma if not last element
+      Serial.printf("%lu,", c); // print comma if not last element
     } else {
-      Serial.printf("%i\n", c); // print newline if last element
+      Serial.printf("%lu\n", c); // print newline if last element
     }
   }
   delay(reading_delay);
