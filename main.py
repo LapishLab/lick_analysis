@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -32,6 +33,14 @@ class PiVideo:
     sorted_pts_ms: NDArray[np.float64]
     sorted_frame_indices: NDArray[np.int64]
     capture: cv2.VideoCapture
+    cache_size: int = 20
+    sequential_decode_limit: int = 60
+    display_max_width: int = 640
+    frame_cache: OrderedDict[int, NDArray[np.uint8]] = field(
+        default_factory=OrderedDict,
+        init=False,
+    )
+    last_decoded_frame_index: int | None = field(default=None, init=False)
 
     @classmethod
     def open(cls, pi_name: str, video_path: Path, pts_path: Path) -> "PiVideo":
@@ -55,8 +64,24 @@ class PiVideo:
             capture.release()
             raise ValueError(f"No timestamped frames were found for {video_path}")
 
-        # A recorder can write one final PTS even if its frame was not committed
-        # to the MP4, so only retain timestamps with a corresponding video frame.
+        # Frame counts and PTS files can include trailing entries whose encoded
+        # frames were never committed. Probe backward once at startup so later
+        # out-of-range requests can clamp directly to the last valid frame.
+        last_decodable_frame = None
+        first_candidate = usable_frame_count - 1
+        last_candidate = max(-1, first_candidate - 300)
+        for candidate in range(first_candidate, last_candidate, -1):
+            capture.set(cv2.CAP_PROP_POS_FRAMES, candidate)
+            success, _ = capture.read()
+            if success:
+                last_decodable_frame = candidate
+                break
+
+        if last_decodable_frame is None:
+            capture.release()
+            raise RuntimeError(f"Could not decode frames from {video_path}")
+
+        usable_frame_count = last_decodable_frame + 1
         pts_ms = pts_ms[:usable_frame_count]
         frame_indices = np.arange(usable_frame_count, dtype=np.int64)
         sort_order = np.argsort(pts_ms, kind="stable")
@@ -69,6 +94,84 @@ class PiVideo:
             sorted_pts_ms=pts_ms[sort_order],
             sorted_frame_indices=frame_indices[sort_order],
             capture=capture,
+        )
+
+    def _prepare_frame(self, frame_bgr) -> NDArray[np.uint8]:
+        """Convert a decoded frame to a display-sized RGB array."""
+        height, width = frame_bgr.shape[:2]
+        if width > self.display_max_width:
+            scale = self.display_max_width / width
+            frame_bgr = cv2.resize(
+                frame_bgr,
+                (self.display_max_width, round(height * scale)),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        return np.asarray(
+            cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
+            dtype=np.uint8,
+        )
+
+    def _cache_frame(
+        self,
+        frame_index: int,
+        frame_bgr,
+    ) -> NDArray[np.uint8]:
+        """Prepare and retain a recently decoded frame."""
+        frame_rgb = self._prepare_frame(frame_bgr)
+        self.frame_cache[frame_index] = frame_rgb
+        self.frame_cache.move_to_end(frame_index)
+        while len(self.frame_cache) > self.cache_size:
+            self.frame_cache.popitem(last=False)
+        self.last_decoded_frame_index = frame_index
+        return frame_rgb
+
+    def _decode_frame(
+        self,
+        requested_frame_index: int,
+    ) -> tuple[NDArray[np.uint8], int]:
+        """Decode via cache, sequential reads, or a random seek."""
+        cached_frame = self.frame_cache.get(requested_frame_index)
+        if cached_frame is not None:
+            self.frame_cache.move_to_end(requested_frame_index)
+            return cached_frame, requested_frame_index
+
+        last_index = self.last_decoded_frame_index
+        if (
+            last_index is not None
+            and last_index < requested_frame_index
+            and requested_frame_index - last_index <= self.sequential_decode_limit
+        ):
+            sequential_success = True
+            for frame_index in range(last_index + 1, requested_frame_index + 1):
+                success, frame_bgr = self.capture.read()
+                if not success:
+                    sequential_success = False
+                    break
+                self._cache_frame(frame_index, frame_bgr)
+
+            if sequential_success:
+                return self.frame_cache[requested_frame_index], requested_frame_index
+
+        # Large jumps and uncached backward steps require a random seek. The
+        # nearby-frame fallback also handles an isolated damaged frame.
+        for distance in range(100):
+            candidates = (
+                [requested_frame_index]
+                if distance == 0
+                else [requested_frame_index - distance, requested_frame_index + distance]
+            )
+            for candidate in candidates:
+                if not 0 <= candidate < len(self.frame_pts_ms):
+                    continue
+                self.capture.set(cv2.CAP_PROP_POS_FRAMES, candidate)
+                success, frame_bgr = self.capture.read()
+                if success:
+                    return self._cache_frame(candidate, frame_bgr), candidate
+
+        raise RuntimeError(
+            f"Could not decode a frame near {requested_frame_index} from "
+            f"{self.video_path}"
         )
 
     def nearest_frame(
@@ -89,41 +192,8 @@ class PiVideo:
         )
 
         requested_frame_index = int(self.sorted_frame_indices[nearest_index])
-        frame_index = requested_frame_index
-        frame_bgr = None
-
-        # Some MP4s report a few uncommitted frames at the end. Search nearby
-        # indices so a boundary selection still returns the closest decodable
-        # frame instead of failing the interaction.
-        for distance in range(100):
-            candidates = (
-                [requested_frame_index]
-                if distance == 0
-                else [requested_frame_index - distance, requested_frame_index + distance]
-            )
-            for candidate in candidates:
-                if not 0 <= candidate < len(self.frame_pts_ms):
-                    continue
-                self.capture.set(cv2.CAP_PROP_POS_FRAMES, candidate)
-                success, candidate_frame = self.capture.read()
-                if success:
-                    frame_index = candidate
-                    frame_bgr = candidate_frame
-                    break
-            if frame_bgr is not None:
-                break
-
-        if frame_bgr is None:
-            raise RuntimeError(
-                f"Could not decode a frame near {requested_frame_index} from "
-                f"{self.video_path}"
-            )
-
+        frame_rgb, frame_index = self._decode_frame(requested_frame_index)
         frame_pts_ms = float(self.frame_pts_ms[frame_index])
-        frame_rgb = np.asarray(
-            cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
-            dtype=np.uint8,
-        )
         frame_time = pd.Timestamp(
             self.start_time + pd.to_timedelta(frame_pts_ms, unit="ms")
         )
@@ -427,6 +497,7 @@ def plot_lickometer_data(
     }
 
     figure = plt.figure(figsize=(14, 9), constrained_layout=True)
+    use_blitting = figure.canvas.supports_blit
     grid = figure.add_gridspec(
         3,
         len(pi_names),
@@ -474,6 +545,7 @@ def plot_lickometer_data(
         edgecolor="tab:purple",
         alpha=0.18,
         linewidth=1.2,
+        animated=use_blitting,
     )
     overview_axis.add_patch(zoom_window)
     zoom_center_marker = overview_axis.axvline(
@@ -482,20 +554,72 @@ def plot_lickometer_data(
         linestyle="--",
         linewidth=1.2,
         alpha=0.9,
+        animated=use_blitting,
     )
     overview_time_marker = overview_axis.axvline(
         chosen_time_s,
         color="tab:red",
         linewidth=1.5,
         zorder=3,
+        animated=use_blitting,
     )
     zoom_time_marker = zoom_axis.axvline(
         chosen_time_s,
         color="tab:red",
         linewidth=1.5,
+        animated=use_blitting,
     )
     chosen_time_text = zoom_axis.set_title("", loc="left", pad=2)
+    chosen_time_text.set_animated(use_blitting)
     image_artists = {}
+    displayed_frame_indices: dict[str, int] = {}
+    video_title_artists = {}
+    axis_backgrounds = {}
+    axis_blit_boxes = {}
+
+    def dynamic_artists_for_axis(axis):
+        if axis is overview_axis:
+            return [zoom_window, zoom_center_marker, overview_time_marker]
+        if axis is zoom_axis:
+            return [zoom_time_marker, chosen_time_text]
+
+        for pi_name, video_axis in video_axes.items():
+            if axis is video_axis and pi_name in image_artists:
+                return [image_artists[pi_name], video_title_artists[pi_name]]
+        return []
+
+    def refresh_dynamic_axes(axes) -> None:
+        """Blit only dynamic artists on the axes that changed."""
+        if not use_blitting:
+            figure.canvas.draw_idle()
+            return
+        if not axis_backgrounds:
+            return
+
+        for axis in axes:
+            background = axis_backgrounds.get(axis)
+            blit_box = axis_blit_boxes.get(axis)
+            if background is None or blit_box is None:
+                continue
+            figure.canvas.restore_region(background)
+            for artist in dynamic_artists_for_axis(axis):
+                axis.draw_artist(artist)
+            figure.canvas.blit(blit_box)
+
+    def cache_axis_backgrounds(_event=None) -> None:
+        """Cache static panel backgrounds after a full draw or resize."""
+        if not use_blitting:
+            return
+
+        renderer = figure.canvas.get_renderer()
+        axes = [overview_axis, zoom_axis, *video_axes.values()]
+        axis_backgrounds.clear()
+        axis_blit_boxes.clear()
+        for axis in axes:
+            blit_box = axis.get_tightbbox(renderer)
+            axis_blit_boxes[axis] = blit_box
+            axis_backgrounds[axis] = figure.canvas.copy_from_bbox(blit_box)
+        refresh_dynamic_axes(axes)
 
     def update_zoom_window(center_time_s: float) -> None:
         nonlocal zoom_window_start_s, zoom_window_end_s
@@ -526,10 +650,16 @@ def plot_lickometer_data(
             padding = max((maximum - minimum) * 0.05, 1.0)
             zoom_axis.set_ylim(minimum - padding, maximum + padding)
 
-        figure.canvas.draw_idle()
+        if not use_blitting:
+            figure.canvas.draw_idle()
+        elif axis_backgrounds:
+            # Changing limits and tick labels invalidates the cached detail
+            # background, so this uncommon operation needs one complete draw.
+            figure.canvas.draw()
 
     def update_chosen_sample(new_sample_index: int) -> None:
         nonlocal current_sample_index
+        changed_axes = {overview_axis, zoom_axis}
         current_sample_index = int(np.clip(new_sample_index, 0, len(data) - 1))
         new_time_s = float(time_values[current_sample_index])
         if not zoom_window_start_s <= new_time_s <= zoom_window_end_s:
@@ -551,17 +681,25 @@ def plot_lickometer_data(
             ].nearest_frame(target_pi_time)
             video_axis = video_axes[pi_name]
 
-            if pi_name in image_artists:
-                image_artists[pi_name].set_data(frame)
-            else:
-                image_artists[pi_name] = video_axis.imshow(frame)
+            frame_changed = displayed_frame_indices.get(pi_name) != frame_index
+            if pi_name not in image_artists:
+                image_artists[pi_name] = video_axis.imshow(
+                    frame,
+                    animated=use_blitting,
+                )
                 video_axis.set_axis_off()
+            elif frame_changed:
+                image_artists[pi_name].set_data(frame)
 
-            video_axis.set_title(
-                f"{pi_name} - frame {frame_index:,} ({difference_ms:+.0f} ms)"
-            )
+            if frame_changed:
+                displayed_frame_indices[pi_name] = frame_index
+                video_title_artists[pi_name] = video_axis.set_title(
+                    f"{pi_name} - frame {frame_index:,} ({difference_ms:+.0f} ms)"
+                )
+                video_title_artists[pi_name].set_animated(use_blitting)
+                changed_axes.add(video_axis)
 
-        figure.canvas.draw_idle()
+        refresh_dynamic_axes(changed_axes)
 
     def update_video_lag(text: str) -> None:
         nonlocal video_lag_s
@@ -605,6 +743,8 @@ def plot_lickometer_data(
     lag_text_box.on_submit(update_video_lag)
     update_zoom_window(recording_start_s + zoom_duration_s / 2)
     update_chosen_sample(current_sample_index)
+    figure.canvas.mpl_connect("draw_event", cache_axis_backgrounds)
+    figure.canvas.draw()
 
     try:
         plt.show()
