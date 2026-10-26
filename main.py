@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Rectangle
+from matplotlib.widgets import TextBox
 from numpy.typing import NDArray
 
 
@@ -437,6 +438,13 @@ def plot_lickometer_data(
         pi_name: figure.add_subplot(grid[2, column])
         for column, pi_name in enumerate(pi_names)
     }
+    lag_axis = figure.add_axes((0.86, 0.965, 0.09, 0.025))
+    lag_text_box = TextBox(
+        lag_axis,
+        "Video lag (s): ",
+        initial="0.000",
+    )
+    figure.suptitle(title)
 
     for axis in (overview_axis, zoom_axis):
         axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
@@ -444,14 +452,12 @@ def plot_lickometer_data(
         axis.set(ylabel="Capacitance")
         axis.grid(alpha=0.25)
 
-    overview_axis.set(
-        title=title,
-    )
     overview_axis.legend()
     zoom_axis.set_xlabel("Cumulative time (seconds)")
 
     time_values = data["time_s"].to_numpy(dtype=np.float64)
     current_sample_index = 0
+    video_lag_s = 0.0
     chosen_time_s = float(time_values[current_sample_index])
     recording_start_s = float(time_values[0])
     recording_end_s = float(time_values[-1])
@@ -537,6 +543,9 @@ def plot_lickometer_data(
                 new_time_s,
                 sync_tables[pi_name],
             )
+            target_pi_time = pd.Timestamp(
+                target_pi_time + pd.to_timedelta(video_lag_s, unit="s")
+            )
             frame, frame_index, _, difference_ms = videos[
                 pi_name
             ].nearest_frame(target_pi_time)
@@ -553,6 +562,19 @@ def plot_lickometer_data(
             )
 
         figure.canvas.draw_idle()
+
+    def update_video_lag(text: str) -> None:
+        nonlocal video_lag_s
+        try:
+            new_lag_s = float(text)
+        except ValueError:
+            lag_text_box.ax.set_facecolor("mistyrose")
+            figure.canvas.draw_idle()
+            return
+
+        video_lag_s = new_lag_s
+        lag_text_box.ax.set_facecolor("white")
+        update_chosen_sample(current_sample_index)
 
     def choose_time_from_click(event) -> None:
         if event.inaxes is overview_axis and event.xdata is not None:
@@ -571,6 +593,8 @@ def plot_lickometer_data(
             update_chosen_sample(nearest_sample_index)
 
     def choose_time_from_key(event) -> None:
+        if event.inaxes is lag_axis:
+            return
         if event.key == "left":
             update_chosen_sample(current_sample_index - 1)
         elif event.key == "right":
@@ -578,6 +602,7 @@ def plot_lickometer_data(
 
     figure.canvas.mpl_connect("button_press_event", choose_time_from_click)
     figure.canvas.mpl_connect("key_press_event", choose_time_from_key)
+    lag_text_box.on_submit(update_video_lag)
     update_zoom_window(recording_start_s + zoom_duration_s / 2)
     update_chosen_sample(current_sample_index)
 
