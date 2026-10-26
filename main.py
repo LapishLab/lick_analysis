@@ -1,7 +1,11 @@
+from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 
 EXAMPLE_DATA_DIR = Path(
@@ -13,6 +17,121 @@ class SyncParameters:
     PULSE_STEP_MS: int = 100
     PULSE_MAX_MS: int = 9_000
     PIN: int = 25
+
+
+@dataclass
+class PiVideo:
+    """A Pi video with its wall-clock frame timestamps and decoder."""
+
+    pi_name: str
+    video_path: Path
+    start_time: pd.Timestamp
+    frame_pts_ms: NDArray[np.float64]
+    sorted_pts_ms: NDArray[np.float64]
+    sorted_frame_indices: NDArray[np.int64]
+    capture: cv2.VideoCapture
+
+    @classmethod
+    def open(cls, pi_name: str, video_path: Path, pts_path: Path) -> "PiVideo":
+        start_time = pd.to_datetime(
+            video_path.stem,
+            format="%Y%m%d_%H%M%S_%f",
+            errors="raise",
+        )
+        pts_ms = pd.to_numeric(
+            pd.read_csv(pts_path, header=None).iloc[:, 0],
+            errors="raise",
+        ).to_numpy(dtype=np.float64)
+
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            raise RuntimeError(f"Could not open video {video_path}")
+
+        video_frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        usable_frame_count = min(len(pts_ms), video_frame_count)
+        if usable_frame_count == 0:
+            capture.release()
+            raise ValueError(f"No timestamped frames were found for {video_path}")
+
+        # A recorder can write one final PTS even if its frame was not committed
+        # to the MP4, so only retain timestamps with a corresponding video frame.
+        pts_ms = pts_ms[:usable_frame_count]
+        frame_indices = np.arange(usable_frame_count, dtype=np.int64)
+        sort_order = np.argsort(pts_ms, kind="stable")
+
+        return cls(
+            pi_name=pi_name,
+            video_path=video_path,
+            start_time=start_time,
+            frame_pts_ms=pts_ms,
+            sorted_pts_ms=pts_ms[sort_order],
+            sorted_frame_indices=frame_indices[sort_order],
+            capture=capture,
+        )
+
+    def nearest_frame(
+        self,
+        target_time: pd.Timestamp,
+    ) -> tuple[NDArray[np.uint8], int, pd.Timestamp, float]:
+        """Decode the video frame nearest to a Pi wall-clock time."""
+        target_pts_ms = (target_time - self.start_time).total_seconds() * 1_000
+        insertion_index = int(np.searchsorted(self.sorted_pts_ms, target_pts_ms))
+        candidate_indices = [
+            index
+            for index in (insertion_index - 1, insertion_index)
+            if 0 <= index < len(self.sorted_pts_ms)
+        ]
+        nearest_index = min(
+            candidate_indices,
+            key=lambda index: abs(self.sorted_pts_ms[index] - target_pts_ms),
+        )
+
+        requested_frame_index = int(self.sorted_frame_indices[nearest_index])
+        frame_index = requested_frame_index
+        frame_bgr = None
+
+        # Some MP4s report a few uncommitted frames at the end. Search nearby
+        # indices so a boundary selection still returns the closest decodable
+        # frame instead of failing the interaction.
+        for distance in range(100):
+            candidates = (
+                [requested_frame_index]
+                if distance == 0
+                else [requested_frame_index - distance, requested_frame_index + distance]
+            )
+            for candidate in candidates:
+                if not 0 <= candidate < len(self.frame_pts_ms):
+                    continue
+                self.capture.set(cv2.CAP_PROP_POS_FRAMES, candidate)
+                success, candidate_frame = self.capture.read()
+                if success:
+                    frame_index = candidate
+                    frame_bgr = candidate_frame
+                    break
+            if frame_bgr is not None:
+                break
+
+        if frame_bgr is None:
+            raise RuntimeError(
+                f"Could not decode a frame near {requested_frame_index} from "
+                f"{self.video_path}"
+            )
+
+        frame_pts_ms = float(self.frame_pts_ms[frame_index])
+        frame_rgb = np.asarray(
+            cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB),
+            dtype=np.uint8,
+        )
+        frame_time = pd.Timestamp(
+            self.start_time + pd.to_timedelta(frame_pts_ms, unit="ms")
+        )
+        difference_ms = float(
+            (frame_time - target_time).total_seconds() * 1_000
+        )
+        return frame_rgb, frame_index, frame_time, difference_ms
+
+    def close(self) -> None:
+        self.capture.release()
 
 
 def main() -> None:
@@ -27,7 +146,13 @@ def main() -> None:
             f"(maximum pulse-width error: {maximum_error_ms:.3f} ms)"
         )
 
-    plot_lickometer_data(capacitance, title=csv_path.stem)
+    camera_files = find_pi_camera_files(EXAMPLE_DATA_DIR)
+    plot_lickometer_data(
+        capacitance,
+        sync_tables,
+        camera_files,
+        title=csv_path.stem,
+    )
 
 
 def find_lickometer_csv(experiment_dir: Path) -> Path:
@@ -105,6 +230,31 @@ def find_pi_gpio_csvs(experiment_dir: Path) -> dict[str, Path]:
         )
 
     return gpio_csvs
+
+
+def find_pi_camera_files(
+    experiment_dir: Path,
+) -> dict[str, tuple[Path, Path]]:
+    """Find each Pi's matching MP4 video and frame timestamp file."""
+    camera_files: dict[str, tuple[Path, Path]] = {}
+
+    for pi_name, gpio_csv_path in find_pi_gpio_csvs(experiment_dir).items():
+        camera_directory = gpio_csv_path.parent.parent / "cam"
+        video_files = list(camera_directory.glob("*.mp4"))
+        if len(video_files) != 1:
+            raise RuntimeError(
+                f"Expected one MP4 for {pi_name}, but found {len(video_files)}"
+            )
+
+        video_path = video_files[0]
+        pts_path = video_path.with_suffix(".pts")
+        if not pts_path.is_file():
+            raise FileNotFoundError(
+                f"No matching PTS file was found for {video_path}"
+            )
+        camera_files[pi_name] = (video_path, pts_path)
+
+    return camera_files
 
 
 def make_esp32_sync_table(capacitance: pd.DataFrame) -> pd.DataFrame:
@@ -222,25 +372,140 @@ def build_pi_sync_lookup_tables(
     return lookup_tables
 
 
+def esp32_time_to_pi_time(
+    esp32_time_s: float,
+    sync_table: pd.DataFrame,
+) -> pd.Timestamp:
+    """Interpolate an ESP32 recording time onto a Pi wall clock."""
+    esp32_times = sync_table["esp32_time_s"].to_numpy(dtype=np.float64)
+    if len(esp32_times) < 2:
+        raise ValueError("At least two synchronization points are required")
+    if np.any(np.diff(esp32_times) <= 0):
+        raise ValueError("ESP32 synchronization times must be strictly increasing")
+
+    base_pi_time = sync_table["pi_time"].iloc[0]
+    pi_elapsed_s = (
+        sync_table["pi_time"].sub(base_pi_time).dt.total_seconds().to_numpy()
+    )
+
+    insertion_index = int(np.searchsorted(esp32_times, esp32_time_s))
+    if insertion_index == 0:
+        left_index, right_index = 0, 1
+    elif insertion_index == len(esp32_times):
+        left_index, right_index = len(esp32_times) - 2, len(esp32_times) - 1
+    else:
+        left_index, right_index = insertion_index - 1, insertion_index
+
+    fraction = (esp32_time_s - esp32_times[left_index]) / (
+        esp32_times[right_index] - esp32_times[left_index]
+    )
+    target_elapsed_s = pi_elapsed_s[left_index] + fraction * (
+        pi_elapsed_s[right_index] - pi_elapsed_s[left_index]
+    )
+    return base_pi_time + pd.to_timedelta(target_elapsed_s, unit="s")
+
+
 def plot_lickometer_data(
     data: pd.DataFrame,
+    sync_tables: dict[str, pd.DataFrame],
+    camera_files: dict[str, tuple[Path, Path]],
     title: str,
 ) -> None:
-    """Plot left and right capacitance against cumulative recording time."""
-    _, axis = plt.subplots(figsize=(12, 6), constrained_layout=True)
-    axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
-    axis.plot(data["time_s"], data["right"], label="Right", linewidth=0.8)
-    axis.set(
+    """Interactively show capacitance and synchronized Pi video frames."""
+    if set(sync_tables) != set(camera_files):
+        raise ValueError(
+            "The synchronization tables and camera recordings do not contain "
+            "the same Raspberry Pis"
+        )
+
+    pi_names = sorted(sync_tables)
+    videos = {
+        pi_name: PiVideo.open(pi_name, *camera_files[pi_name])
+        for pi_name in pi_names
+    }
+
+    figure = plt.figure(figsize=(14, 9), constrained_layout=True)
+    grid = figure.add_gridspec(2, len(pi_names), height_ratios=(1, 1.25))
+    trace_axis = figure.add_subplot(grid[0, :])
+    video_axes = {
+        pi_name: figure.add_subplot(grid[1, column])
+        for column, pi_name in enumerate(pi_names)
+    }
+
+    trace_axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
+    trace_axis.plot(data["time_s"], data["right"], label="Right", linewidth=0.8)
+    trace_axis.set(
         title=title,
         xlabel="Cumulative time (seconds)",
         ylabel="Capacitance",
     )
-    axis.grid(alpha=0.25)
-    axis.legend()
-    plt.show()
+    trace_axis.grid(alpha=0.25)
+    trace_axis.legend()
 
+    chosen_time_s = float(data["time_s"].iloc[0])
+    time_marker = trace_axis.axvline(
+        chosen_time_s,
+        color="tab:red",
+        linewidth=1.5,
+        label="Chosen time",
+    )
+    chosen_time_text = trace_axis.text(
+        0.01,
+        0.98,
+        "",
+        transform=trace_axis.transAxes,
+        horizontalalignment="left",
+        verticalalignment="top",
+        bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+    )
+    image_artists = {}
 
+    def update_chosen_time(new_time_s: float) -> None:
+        new_time_s = float(
+            np.clip(new_time_s, data["time_s"].iloc[0], data["time_s"].iloc[-1])
+        )
+        time_marker.set_xdata([new_time_s, new_time_s])
+        chosen_time_text.set_text(
+            f"Chosen ESP32 time: {new_time_s:.3f} s\n"
+            "Click elsewhere on this plot to update the video frames"
+        )
 
+        for pi_name in pi_names:
+            target_pi_time = esp32_time_to_pi_time(
+                new_time_s,
+                sync_tables[pi_name],
+            )
+            frame, frame_index, frame_time, difference_ms = videos[
+                pi_name
+            ].nearest_frame(target_pi_time)
+            video_axis = video_axes[pi_name]
+
+            if pi_name in image_artists:
+                image_artists[pi_name].set_data(frame)
+            else:
+                image_artists[pi_name] = video_axis.imshow(frame)
+                video_axis.set_axis_off()
+
+            video_axis.set_title(
+                f"{pi_name} — frame {frame_index:,}\n"
+                f"{frame_time.strftime('%H:%M:%S.%f')[:-3]} "
+                f"(nearest by {difference_ms:+.1f} ms)"
+            )
+
+        figure.canvas.draw_idle()
+
+    def choose_time_from_click(event) -> None:
+        if event.inaxes is trace_axis and event.xdata is not None:
+            update_chosen_time(event.xdata)
+
+    figure.canvas.mpl_connect("button_press_event", choose_time_from_click)
+    update_chosen_time(chosen_time_s)
+
+    try:
+        plt.show()
+    finally:
+        for video in videos.values():
+            video.close()
 
 
 if __name__ == "__main__":
