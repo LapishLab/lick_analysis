@@ -5,6 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Rectangle
 from numpy.typing import NDArray
 
 
@@ -424,53 +425,123 @@ def plot_lickometer_data(
         for pi_name in pi_names
     }
 
-    figure = plt.figure(figsize=(14, 9), constrained_layout=True)
-    grid = figure.add_gridspec(2, len(pi_names), height_ratios=(1, 1.25))
-    trace_axis = figure.add_subplot(grid[0, :])
+    figure = plt.figure(figsize=(14, 11), constrained_layout=True)
+    grid = figure.add_gridspec(
+        3,
+        len(pi_names),
+        height_ratios=(0.7, 1, 1.25),
+    )
+    overview_axis = figure.add_subplot(grid[0, :])
+    zoom_axis = figure.add_subplot(grid[1, :])
     video_axes = {
-        pi_name: figure.add_subplot(grid[1, column])
+        pi_name: figure.add_subplot(grid[2, column])
         for column, pi_name in enumerate(pi_names)
     }
 
-    trace_axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
-    trace_axis.plot(data["time_s"], data["right"], label="Right", linewidth=0.8)
-    trace_axis.set(
+    for axis in (overview_axis, zoom_axis):
+        axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
+        axis.plot(data["time_s"], data["right"], label="Right", linewidth=0.8)
+        axis.set(xlabel="Cumulative time (seconds)", ylabel="Capacitance")
+        axis.grid(alpha=0.25)
+
+    overview_axis.set(
         title=title,
-        xlabel="Cumulative time (seconds)",
-        ylabel="Capacitance",
     )
-    trace_axis.grid(alpha=0.25)
-    trace_axis.legend()
+    overview_axis.legend()
+    zoom_axis.set_title("Five-second detail")
 
     time_values = data["time_s"].to_numpy(dtype=np.float64)
     current_sample_index = 0
     chosen_time_s = float(time_values[current_sample_index])
-    time_marker = trace_axis.axvline(
+    recording_start_s = float(time_values[0])
+    recording_end_s = float(time_values[-1])
+    zoom_duration_s = min(5.0, recording_end_s - recording_start_s)
+    zoom_window_start_s = recording_start_s
+    zoom_window_end_s = recording_start_s + zoom_duration_s
+
+    zoom_window = Rectangle(
+        (zoom_window_start_s, 0),
+        zoom_duration_s,
+        1,
+        transform=overview_axis.get_xaxis_transform(),
+        facecolor="tab:purple",
+        edgecolor="tab:purple",
+        alpha=0.18,
+        linewidth=1.2,
+    )
+    overview_axis.add_patch(zoom_window)
+    zoom_center_marker = overview_axis.axvline(
+        zoom_window_start_s + zoom_duration_s / 2,
+        color="tab:purple",
+        linestyle="--",
+        linewidth=1.2,
+        alpha=0.9,
+    )
+    overview_time_marker = overview_axis.axvline(
         chosen_time_s,
         color="tab:red",
         linewidth=1.5,
-        label="Chosen time",
+        zorder=3,
     )
-    chosen_time_text = trace_axis.text(
+    zoom_time_marker = zoom_axis.axvline(
+        chosen_time_s,
+        color="tab:red",
+        linewidth=1.5,
+    )
+    chosen_time_text = zoom_axis.text(
         0.01,
         0.98,
         "",
-        transform=trace_axis.transAxes,
+        transform=zoom_axis.transAxes,
         horizontalalignment="left",
         verticalalignment="top",
         bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
     )
     image_artists = {}
 
+    def update_zoom_window(center_time_s: float) -> None:
+        nonlocal zoom_window_start_s, zoom_window_end_s
+        zoom_window_start_s = float(
+            np.clip(
+                center_time_s - zoom_duration_s / 2,
+                recording_start_s,
+                recording_end_s - zoom_duration_s,
+            )
+        )
+        zoom_window_end_s = zoom_window_start_s + zoom_duration_s
+        zoom_window.set_x(zoom_window_start_s)
+        zoom_window.set_width(zoom_duration_s)
+        zoom_center_marker.set_xdata(
+            [
+                zoom_window_start_s + zoom_duration_s / 2,
+                zoom_window_start_s + zoom_duration_s / 2,
+            ]
+        )
+        zoom_axis.set_xlim(zoom_window_start_s, zoom_window_end_s)
+
+        first_visible = int(np.searchsorted(time_values, zoom_window_start_s))
+        past_visible = int(np.searchsorted(time_values, zoom_window_end_s, side="right"))
+        visible = data.iloc[first_visible:past_visible]
+        if not visible.empty:
+            minimum = float(visible[["left", "right"]].min().min())
+            maximum = float(visible[["left", "right"]].max().max())
+            padding = max((maximum - minimum) * 0.05, 1.0)
+            zoom_axis.set_ylim(minimum - padding, maximum + padding)
+
+        figure.canvas.draw_idle()
+
     def update_chosen_sample(new_sample_index: int) -> None:
         nonlocal current_sample_index
         current_sample_index = int(np.clip(new_sample_index, 0, len(data) - 1))
         new_time_s = float(time_values[current_sample_index])
-        time_marker.set_xdata([new_time_s, new_time_s])
+        if not zoom_window_start_s <= new_time_s <= zoom_window_end_s:
+            update_zoom_window(new_time_s)
+        overview_time_marker.set_xdata([new_time_s, new_time_s])
+        zoom_time_marker.set_xdata([new_time_s, new_time_s])
         chosen_time_text.set_text(
             f"Chosen ESP32 time: {new_time_s:.3f} s "
             f"(sample {current_sample_index:,})\n"
-            "Click the trace or use Left/Right to move one datapoint"
+            "Overview click: move zoom | Detail click or Left/Right: choose sample"
         )
 
         for pi_name in pi_names:
@@ -498,7 +569,9 @@ def plot_lickometer_data(
         figure.canvas.draw_idle()
 
     def choose_time_from_click(event) -> None:
-        if event.inaxes is trace_axis and event.xdata is not None:
+        if event.inaxes is overview_axis and event.xdata is not None:
+            update_zoom_window(event.xdata)
+        elif event.inaxes is zoom_axis and event.xdata is not None:
             insertion_index = int(np.searchsorted(time_values, event.xdata))
             candidate_indices = [
                 index
@@ -519,6 +592,7 @@ def plot_lickometer_data(
 
     figure.canvas.mpl_connect("button_press_event", choose_time_from_click)
     figure.canvas.mpl_connect("key_press_event", choose_time_from_key)
+    update_zoom_window(recording_start_s + zoom_duration_s / 2)
     update_chosen_sample(current_sample_index)
 
     try:
