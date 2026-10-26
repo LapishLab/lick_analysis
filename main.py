@@ -442,7 +442,9 @@ def plot_lickometer_data(
     trace_axis.grid(alpha=0.25)
     trace_axis.legend()
 
-    chosen_time_s = float(data["time_s"].iloc[0])
+    time_values = data["time_s"].to_numpy(dtype=np.float64)
+    current_sample_index = 0
+    chosen_time_s = float(time_values[current_sample_index])
     time_marker = trace_axis.axvline(
         chosen_time_s,
         color="tab:red",
@@ -460,14 +462,15 @@ def plot_lickometer_data(
     )
     image_artists = {}
 
-    def update_chosen_time(new_time_s: float) -> None:
-        new_time_s = float(
-            np.clip(new_time_s, data["time_s"].iloc[0], data["time_s"].iloc[-1])
-        )
+    def update_chosen_sample(new_sample_index: int) -> None:
+        nonlocal current_sample_index
+        current_sample_index = int(np.clip(new_sample_index, 0, len(data) - 1))
+        new_time_s = float(time_values[current_sample_index])
         time_marker.set_xdata([new_time_s, new_time_s])
         chosen_time_text.set_text(
-            f"Chosen ESP32 time: {new_time_s:.3f} s\n"
-            "Click elsewhere on this plot to update the video frames"
+            f"Chosen ESP32 time: {new_time_s:.3f} s "
+            f"(sample {current_sample_index:,})\n"
+            "Click the trace or use Left/Right to move one datapoint"
         )
 
         for pi_name in pi_names:
@@ -496,10 +499,27 @@ def plot_lickometer_data(
 
     def choose_time_from_click(event) -> None:
         if event.inaxes is trace_axis and event.xdata is not None:
-            update_chosen_time(event.xdata)
+            insertion_index = int(np.searchsorted(time_values, event.xdata))
+            candidate_indices = [
+                index
+                for index in (insertion_index - 1, insertion_index)
+                if 0 <= index < len(time_values)
+            ]
+            nearest_sample_index = min(
+                candidate_indices,
+                key=lambda index: abs(time_values[index] - event.xdata),
+            )
+            update_chosen_sample(nearest_sample_index)
+
+    def choose_time_from_key(event) -> None:
+        if event.key == "left":
+            update_chosen_sample(current_sample_index - 1)
+        elif event.key == "right":
+            update_chosen_sample(current_sample_index + 1)
 
     figure.canvas.mpl_connect("button_press_event", choose_time_from_click)
-    update_chosen_time(chosen_time_s)
+    figure.canvas.mpl_connect("key_press_event", choose_time_from_key)
+    update_chosen_sample(current_sample_index)
 
     try:
         plt.show()
