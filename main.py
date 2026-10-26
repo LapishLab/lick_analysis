@@ -425,11 +425,11 @@ def plot_lickometer_data(
         for pi_name in pi_names
     }
 
-    figure = plt.figure(figsize=(14, 11), constrained_layout=True)
+    figure = plt.figure(figsize=(14, 9), constrained_layout=True)
     grid = figure.add_gridspec(
         3,
         len(pi_names),
-        height_ratios=(0.7, 1, 1.25),
+        height_ratios=(0.65, 0.85, 1.1),
     )
     overview_axis = figure.add_subplot(grid[0, :])
     zoom_axis = figure.add_subplot(grid[1, :])
@@ -441,14 +441,14 @@ def plot_lickometer_data(
     for axis in (overview_axis, zoom_axis):
         axis.plot(data["time_s"], data["left"], label="Left", linewidth=0.8)
         axis.plot(data["time_s"], data["right"], label="Right", linewidth=0.8)
-        axis.set(xlabel="Cumulative time (seconds)", ylabel="Capacitance")
+        axis.set(ylabel="Capacitance")
         axis.grid(alpha=0.25)
 
     overview_axis.set(
         title=title,
     )
     overview_axis.legend()
-    zoom_axis.set_title("Five-second detail")
+    zoom_axis.set_xlabel("Cumulative time (seconds)")
 
     time_values = data["time_s"].to_numpy(dtype=np.float64)
     current_sample_index = 0
@@ -488,15 +488,7 @@ def plot_lickometer_data(
         color="tab:red",
         linewidth=1.5,
     )
-    chosen_time_text = zoom_axis.text(
-        0.01,
-        0.98,
-        "",
-        transform=zoom_axis.transAxes,
-        horizontalalignment="left",
-        verticalalignment="top",
-        bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
-    )
+    chosen_time_text = zoom_axis.set_title("", loc="left", pad=2)
     image_artists = {}
 
     def update_zoom_window(center_time_s: float) -> None:
@@ -538,18 +530,14 @@ def plot_lickometer_data(
             update_zoom_window(new_time_s)
         overview_time_marker.set_xdata([new_time_s, new_time_s])
         zoom_time_marker.set_xdata([new_time_s, new_time_s])
-        chosen_time_text.set_text(
-            f"Chosen ESP32 time: {new_time_s:.3f} s "
-            f"(sample {current_sample_index:,})\n"
-            "Overview click: move zoom | Detail click or Left/Right: choose sample"
-        )
+        chosen_time_text.set_text(f"ESP32 time: {new_time_s:.3f}s")
 
         for pi_name in pi_names:
             target_pi_time = esp32_time_to_pi_time(
                 new_time_s,
                 sync_tables[pi_name],
             )
-            frame, frame_index, frame_time, difference_ms = videos[
+            frame, frame_index, _, difference_ms = videos[
                 pi_name
             ].nearest_frame(target_pi_time)
             video_axis = video_axes[pi_name]
@@ -561,9 +549,7 @@ def plot_lickometer_data(
                 video_axis.set_axis_off()
 
             video_axis.set_title(
-                f"{pi_name} — frame {frame_index:,}\n"
-                f"{frame_time.strftime('%H:%M:%S.%f')[:-3]} "
-                f"(nearest by {difference_ms:+.1f} ms)"
+                f"{pi_name} - frame {frame_index:,} ({difference_ms:+.0f} ms)"
             )
 
         figure.canvas.draw_idle()
