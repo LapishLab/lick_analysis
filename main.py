@@ -1,12 +1,15 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol, cast
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.backend_bases import DrawEvent
 from matplotlib.patches import Rectangle
+from matplotlib.transforms import BboxBase
 from matplotlib.widgets import TextBox
 from numpy.typing import NDArray
 
@@ -14,6 +17,14 @@ from numpy.typing import NDArray
 EXAMPLE_DATA_DIR = Path(
     r"C:\Users\daswyga\Desktop\fiber_lick\2026-10-26_08-58-30_NAc_dlight_rat1"
 )
+
+
+class BlittingCanvas(Protocol):
+    """Backend canvas operations omitted from Matplotlib's base canvas stub."""
+    def copy_from_bbox(self, bbox: BboxBase) -> object: ...
+    def restore_region(self, region: object) -> None: ...
+    def blit(self, bbox: BboxBase | None = None) -> None: ...
+
 
 class SyncParameters:
     INTERVAL_SAMPLES: int = 1_000
@@ -498,6 +509,7 @@ def plot_lickometer_data(
 
     figure = plt.figure(figsize=(14, 9), constrained_layout=True)
     use_blitting = figure.canvas.supports_blit
+    blitting_canvas = cast(BlittingCanvas, figure.canvas)
     grid = figure.add_gridspec(
         3,
         len(pi_names),
@@ -601,24 +613,26 @@ def plot_lickometer_data(
             blit_box = axis_blit_boxes.get(axis)
             if background is None or blit_box is None:
                 continue
-            figure.canvas.restore_region(background)
+            blitting_canvas.restore_region(background)
             for artist in dynamic_artists_for_axis(axis):
                 axis.draw_artist(artist)
-            figure.canvas.blit(blit_box)
+            blitting_canvas.blit(blit_box)
 
-    def cache_axis_backgrounds(_event=None) -> None:
+    def cache_axis_backgrounds(event: DrawEvent) -> None:
         """Cache static panel backgrounds after a full draw or resize."""
         if not use_blitting:
             return
 
-        renderer = figure.canvas.get_renderer()
+        renderer = event.renderer
         axes = [overview_axis, zoom_axis, *video_axes.values()]
         axis_backgrounds.clear()
         axis_blit_boxes.clear()
         for axis in axes:
             blit_box = axis.get_tightbbox(renderer)
+            if blit_box is None:
+                continue
             axis_blit_boxes[axis] = blit_box
-            axis_backgrounds[axis] = figure.canvas.copy_from_bbox(blit_box)
+            axis_backgrounds[axis] = blitting_canvas.copy_from_bbox(blit_box)
         refresh_dynamic_axes(axes)
 
     def update_zoom_window(center_time_s: float) -> None:
