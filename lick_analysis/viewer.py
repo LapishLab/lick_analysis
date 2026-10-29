@@ -142,6 +142,24 @@ class LickometerViewer:
         )
         self.chosen_time_text = self.zoom_axis.set_title("", loc="left", pad=2)
         self.chosen_time_text.set_animated(self.use_blitting)
+        (self.measurement_line,) = self.zoom_axis.plot(
+            [],
+            [],
+            color="tab:orange",
+            marker="o",
+            linewidth=1.5,
+            markersize=5,
+            zorder=5,
+            animated=self.use_blitting,
+        )
+        self.measurement_text = self.zoom_axis.text(
+            0.02, 0.96, "", transform=self.zoom_axis.transAxes,
+            va="top", ha="left", color="tab:orange",
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
+            animated=self.use_blitting,
+        )
+        self._measurement_start: tuple[float, float] | None = None
+        self._measurement_dragged = False
 
         self.image_artists: dict[str, AxesImage] = {}
         self.displayed_frame_indices: dict[str, int] = {}
@@ -152,6 +170,15 @@ class LickometerViewer:
         self.figure.canvas.mpl_connect(
             "button_press_event",
             self._choose_time_from_click,
+        )
+        self.figure.canvas.mpl_connect(
+            "button_press_event", self._start_measurement
+        )
+        self.figure.canvas.mpl_connect(
+            "motion_notify_event", self._update_measurement
+        )
+        self.figure.canvas.mpl_connect(
+            "button_release_event", self._finish_measurement
         )
         self.figure.canvas.mpl_connect(
             "key_press_event",
@@ -176,7 +203,12 @@ class LickometerViewer:
                 self.overview_time_marker,
             ]
         if axis is self.zoom_axis:
-            return [self.zoom_time_marker, self.chosen_time_text]
+            return [
+                self.zoom_time_marker,
+                self.chosen_time_text,
+                self.measurement_line,
+                self.measurement_text,
+            ]
 
         for pi_name, video_axis in self.video_axes.items():
             if axis is video_axis and pi_name in self.image_artists:
@@ -327,7 +359,42 @@ class LickometerViewer:
     def _choose_time_from_click(self, event: MouseEvent) -> None:
         if event.inaxes is self.overview_axis and event.xdata is not None:
             self._update_zoom_window(event.xdata)
-        elif event.inaxes is self.zoom_axis and event.xdata is not None:
+
+    def _start_measurement(self, event: MouseEvent) -> None:
+        if (
+            event.inaxes is self.zoom_axis
+            and event.button == 1
+            and event.xdata is not None
+            and event.ydata is not None
+        ):
+            self._measurement_start = (float(event.xdata), float(event.ydata))
+            self._measurement_dragged = False
+
+    def _update_measurement(self, event: MouseEvent) -> None:
+        if self._measurement_start is None or event.button != 1:
+            return
+        if (
+            event.inaxes is not self.zoom_axis
+            or event.xdata is None
+            or event.ydata is None
+        ):
+            return
+        start_time, start_capacitance = self._measurement_start
+        end_time, end_capacitance = float(event.xdata), float(event.ydata)
+        start_pixel = self.zoom_axis.transData.transform(self._measurement_start)
+        if np.hypot(event.x - start_pixel[0], event.y - start_pixel[1]) > 3:
+            self._measurement_dragged = True
+        self._set_measurement(start_time, start_capacitance, end_time, end_capacitance)
+
+    def _finish_measurement(self, event: MouseEvent) -> None:
+        if self._measurement_start is None:
+            return
+        self._update_measurement(event)
+        if (
+            not self._measurement_dragged
+            and event.inaxes is self.zoom_axis
+            and event.xdata is not None
+        ):
             insertion_index = int(np.searchsorted(self.time_values, event.xdata))
             candidate_indices = [
                 index
@@ -339,6 +406,23 @@ class LickometerViewer:
                 key=lambda index: abs(self.time_values[index] - event.xdata),
             )
             self._update_chosen_sample(nearest_sample_index)
+        self._measurement_start = None
+
+    def _set_measurement(
+        self,
+        start_time: float,
+        start_capacitance: float,
+        end_time: float,
+        end_capacitance: float,
+    ) -> None:
+        self.measurement_line.set_data(
+            [start_time, end_time], [start_capacitance, end_capacitance]
+        )
+        self.measurement_text.set_text(
+            f"Δt: {end_time - start_time:+.4f} s    "
+            f"Δcapacitance: {end_capacitance - start_capacitance:+.4f}"
+        )
+        self._refresh_dynamic_axes([self.zoom_axis])
 
     def _choose_time_from_key(self, event: KeyEvent) -> None:
         if event.inaxes is self.lag_axis:
