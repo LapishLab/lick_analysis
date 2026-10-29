@@ -78,6 +78,17 @@ def _camera_final_pts(pi_data_folders: list[Path], device_name: str) -> float | 
     return max(final_values) if final_values else None
 
 
+def _csv_has_data_rows(csv_path: Path) -> bool:
+    """Return whether a CSV contains at least one nonblank row after its header."""
+    try:
+        with csv_path.open("r", newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.reader(csv_file)
+            next(reader, None)  # Header
+            return any(any(value.strip() for value in row) for row in reader)
+    except (OSError, UnicodeError, csv.Error):
+        return False
+
+
 def find_session_problems(session_folder: Path) -> list[int]:
     """Return problem keys for missing fiber01lick sync or lickometer data."""
     problem_keys: list[int] = []
@@ -87,7 +98,7 @@ def find_session_problems(session_folder: Path) -> list[int]:
         if path.is_dir() and path.name.lower().startswith("pi-data_")
     ]
     fiber01lick_folders = [
-        device_folder / "fiber01lick"
+        device_folder
         for pi_data_folder in pi_data_folders
         for device_folder in pi_data_folder.iterdir()
         if device_folder.is_dir() and device_folder.name.lower() == "fiber01lick"
@@ -100,7 +111,7 @@ def find_session_problems(session_folder: Path) -> list[int]:
             csv_path
             for device_folder in fiber01lick_folders
             for csv_path in (device_folder / "gpio").glob("*.csv")
-            if csv_path.is_file() and csv_path.stat().st_size > 0
+            if csv_path.is_file() and _csv_has_data_rows(csv_path)
         ]
         if not sync_csvs:
             problem_keys.append(2)
