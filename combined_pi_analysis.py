@@ -15,12 +15,14 @@ root = r"C:\Users\daswyga\Desktop\fiber_lick\\"
 f = r"2026-10-26_08-58-30_NAc_dlight_rat1" # Good but video cut short and no LED
 # f = r"C:\Users\daswyga\Desktop\fiber_lick\2026-10-28_08-52-18_NAc_dlight_rat1"
 f = r"2026-10-28_15-47-49_NAc_dlight_rat2"
+# f= r"2026-10-28_14-06-18_NAc_dlight_rat6"
 
 EXAMPLE_DATA_DIR = Path(root + f)
 
 # Configure each Pi by the name of its directory under pi-data*.
 PI_PARAMETERS = {
     "fiber01": SyncParameters(pin=25),
+    # "fiber01lick": SyncParameters(pin=25),
     "fiber01lick": SyncParameters(pin=16),
 }
 
@@ -43,9 +45,7 @@ def main() -> None:
             raise FileNotFoundError(f"GPIO CSV not found for {pi_name}")
         if pi_paths.video is None or pi_paths.video_pts is None:
             raise FileNotFoundError(f"Video or frame timestamps not found for {pi_name}")
-        sync_tables[pi_name] = build_pi_sync_lookup_tables(
-            {pi_name: pi_paths.gpio_csv}, capacitance, parameters
-        )[pi_name]
+        sync_tables[pi_name] = build_pi_sync_lookup_tables(pi_name, pi_paths.gpio_csv, capacitance, parameters)
         camera_files[pi_name] = (pi_paths.video, pi_paths.video_pts)
 
     for pi_name, sync_table in sync_tables.items():

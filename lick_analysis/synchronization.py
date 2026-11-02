@@ -56,22 +56,18 @@ def load_pi_sync_pulses(
         format="%Y%m%d_%H%M%S_%f",
         errors="raise",
     )
-    events = events.sort_values("pi_time", ignore_index=True)
+    # A leading offset belongs to a pulse that started before recording began.
+    if events["Event"].iloc[0] == 0:
+        events = events.iloc[1:]
+    # A trailing onset has no recorded offset, so it cannot form a complete pulse.
+    if not events.empty and events["Event"].iloc[-1] == 1:
+        events = events.iloc[:-1]
 
-    expected_events = [1, 0] * (len(events) // 2)
-    if len(events) % 2 or events["Event"].tolist() != expected_events:
-        raise ValueError(
-            f"Synchronization events in {gpio_csv_path} are not alternating "
-            "onset/offset pairs"
-        )
-
-    onsets = events.iloc[0::2].reset_index(drop=True)
-    offsets = events.iloc[1::2].reset_index(drop=True)
+    onsets = events.loc[events["Event"].eq(1)].reset_index(drop=True)
+    offsets = events.loc[events["Event"].eq(0)].reset_index(drop=True)
     observed_widths_ms = (
         offsets["pi_time"].sub(onsets["pi_time"]).dt.total_seconds() * 1_000
     )
-    if observed_widths_ms.le(0).any():
-        raise ValueError(f"{gpio_csv_path} contains a non-positive pulse duration")
 
     return pd.DataFrame(
         {
@@ -83,49 +79,46 @@ def load_pi_sync_pulses(
 
 
 def build_pi_sync_lookup_tables(
-    gpio_csvs: dict[str, Path],
+    pi_name: str,
+    gpio_csv_path: Path,
     capacitance: pd.DataFrame,
     parameters: SyncParameters,
-) -> dict[str, pd.DataFrame]:
+) -> pd.DataFrame:
     """Associate each ESP32 sync time with each Raspberry Pi clock."""
     esp32_pulses = make_esp32_sync_table(capacitance, parameters)
     tolerance_ms = parameters.pulse_step_ms / 2
-    lookup_tables: dict[str, pd.DataFrame] = {}
 
-    for pi_name, gpio_csv_path in gpio_csvs.items():
-        pi_pulses = load_pi_sync_pulses(gpio_csv_path, parameters)
-        if len(pi_pulses) != len(esp32_pulses):
-            raise ValueError(
-                f"{pi_name} has {len(pi_pulses)} synchronization pulses, but "
-                f"the ESP32 data has {len(esp32_pulses)}"
-            )
-
-        lookup = esp32_pulses.merge(
-            pi_pulses,
-            on="pulse_index",
-            how="inner",
-            validate="one_to_one",
-        )
-        lookup["pulse_width_error_ms"] = (
-            lookup["observed_pulse_ms"] - lookup["expected_pulse_ms"]
-        )
-        lookup["pulse_width_matches"] = lookup["pulse_width_error_ms"].abs().le(
-            tolerance_ms
+    pi_pulses = load_pi_sync_pulses(gpio_csv_path, parameters)
+    if len(pi_pulses) != len(esp32_pulses):
+        raise ValueError(
+            f"{pi_name} has {len(pi_pulses)} synchronization pulses, but "
+            f"the ESP32 data has {len(esp32_pulses)}"
         )
 
-        mismatches = lookup.loc[~lookup["pulse_width_matches"]]
-        if not mismatches.empty:
-            first = mismatches.iloc[0]
-            raise ValueError(
-                f"{pi_name} failed pulse-width verification at pulse "
-                f"{int(first['pulse_index'])}: expected "
-                f"{first['expected_pulse_ms']:.0f} ms, observed "
-                f"{first['observed_pulse_ms']:.3f} ms"
-            )
+    lookup = esp32_pulses.merge(
+        pi_pulses,
+        on="pulse_index",
+        how="inner",
+        validate="one_to_one",
+    )
+    lookup["pulse_width_error_ms"] = (
+        lookup["observed_pulse_ms"] - lookup["expected_pulse_ms"]
+    )
+    lookup["pulse_width_matches"] = lookup["pulse_width_error_ms"].abs().le(
+        tolerance_ms
+    )
 
-        lookup_tables[pi_name] = lookup
+    mismatches = lookup.loc[~lookup["pulse_width_matches"]]
+    if not mismatches.empty:
+        first = mismatches.iloc[0]
+        raise ValueError(
+            f"{pi_name} failed pulse-width verification at pulse "
+            f"{int(first['pulse_index'])}: expected "
+            f"{first['expected_pulse_ms']:.0f} ms, observed "
+            f"{first['observed_pulse_ms']:.3f} ms"
+        )
 
-    return lookup_tables
+    return lookup
 
 
 def esp32_time_to_pi_time(
