@@ -84,39 +84,55 @@ def build_pi_sync_lookup_tables(
     capacitance: pd.DataFrame,
     parameters: SyncParameters,
 ) -> pd.DataFrame:
-    """Associate each ESP32 sync time with each Raspberry Pi clock."""
+    """Match a contiguous run of Pi pulses to the ESP32 pulse sequence."""
     esp32_pulses = make_esp32_sync_table(capacitance, parameters)
     tolerance_ms = parameters.pulse_step_ms / 2
 
     pi_pulses = load_pi_sync_pulses(gpio_csv_path, parameters)
-    if len(pi_pulses) != len(esp32_pulses):
+    if len(pi_pulses) < 2:
+        raise ValueError(f"{pi_name} needs at least two synchronization pulses")
+    if len(pi_pulses) > len(esp32_pulses):
         raise ValueError(
             f"{pi_name} has {len(pi_pulses)} synchronization pulses, but "
             f"the ESP32 data has {len(esp32_pulses)}"
         )
 
+    expected_widths = esp32_pulses["expected_pulse_ms"].to_numpy()
+    observed_widths = pi_pulses["observed_pulse_ms"].to_numpy()
+    matching_starts = [
+        start
+        for start in range(len(expected_widths) - len(observed_widths) + 1)
+        if np.all(
+            np.abs(expected_widths[start : start + len(observed_widths)] - observed_widths)
+            <= tolerance_ms
+        )
+    ]
+    if not matching_starts:
+        raise ValueError(
+            f"{pi_name} synchronization pulses do not match a contiguous "
+            "portion of the ESP32 pulse sequence"
+        )
+    if len(matching_starts) > 1:
+        raise ValueError(
+            f"{pi_name} synchronization pulses match {len(matching_starts)} "
+            "positions in the repeating ESP32 sequence; alignment is ambiguous"
+        )
+
+    pi_pulses = pi_pulses.assign(
+        pulse_index=pi_pulses["pulse_index"] + matching_starts[0]
+    )
     lookup = esp32_pulses.merge(
         pi_pulses,
         on="pulse_index",
         how="inner",
         validate="one_to_one",
     )
-    lookup["pulse_width_error_ms"] = (
-        lookup["observed_pulse_ms"] - lookup["expected_pulse_ms"]
+    error = lookup["observed_pulse_ms"] - lookup["expected_pulse_ms"]
+    max_error_ms = error.abs().max()
+    print(
+        f"{pi_name}: {len(lookup)} synchronization points "
+        f"(maximum pulse-width error: {max_error_ms:.1f} ms)"
     )
-    lookup["pulse_width_matches"] = lookup["pulse_width_error_ms"].abs().le(
-        tolerance_ms
-    )
-
-    mismatches = lookup.loc[~lookup["pulse_width_matches"]]
-    if not mismatches.empty:
-        first = mismatches.iloc[0]
-        raise ValueError(
-            f"{pi_name} failed pulse-width verification at pulse "
-            f"{int(first['pulse_index'])}: expected "
-            f"{first['expected_pulse_ms']:.0f} ms, observed "
-            f"{first['observed_pulse_ms']:.3f} ms"
-        )
 
     return lookup
 

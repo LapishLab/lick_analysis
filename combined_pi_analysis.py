@@ -12,18 +12,18 @@ from lick_analysis import (
 
 
 root = r"C:\Users\daswyga\Desktop\fiber_lick\\"
-f = r"2026-10-26_08-58-30_NAc_dlight_rat1" # Good but video cut short and no LED
+# f = r"2026-10-26_08-58-30_NAc_dlight_rat1" # Good but video cut short and no LED
 # f = r"C:\Users\daswyga\Desktop\fiber_lick\2026-10-28_08-52-18_NAc_dlight_rat1"
-f = r"2026-10-28_15-47-49_NAc_dlight_rat2"
-# f= r"2026-10-28_14-06-18_NAc_dlight_rat6"
+# f = r"2026-10-28_15-47-49_NAc_dlight_rat2"
+f = r"2026-10-28_14-06-18_NAc_dlight_rat6"
 
 EXAMPLE_DATA_DIR = Path(root + f)
 
 # Configure each Pi by the name of its directory under pi-data*.
 PI_PARAMETERS = {
     "fiber01": SyncParameters(pin=25),
-    # "fiber01lick": SyncParameters(pin=25),
-    "fiber01lick": SyncParameters(pin=16),
+    "fiber01lick": SyncParameters(pin=25),
+    # "fiber01lick": SyncParameters(pin=16),
 }
 
 
@@ -48,12 +48,6 @@ def main() -> None:
         sync_tables[pi_name] = build_pi_sync_lookup_tables(pi_name, pi_paths.gpio_csv, capacitance, parameters)
         camera_files[pi_name] = (pi_paths.video, pi_paths.video_pts)
 
-    for pi_name, sync_table in sync_tables.items():
-        maximum_error_ms = sync_table["pulse_width_error_ms"].abs().max()
-        print(
-            f"{pi_name}: {len(sync_table)} synchronization points "
-            f"(maximum pulse-width error: {maximum_error_ms:.3f} ms)"
-        )
 
     videos = open_pi_videos(camera_files, viewer_settings)
     try:
