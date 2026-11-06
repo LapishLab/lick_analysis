@@ -44,7 +44,10 @@ def _optional_one_file(directory: Path, pattern: str, description: str) -> Path 
     return matches[0] if matches else None
 
 
-def load_session_paths(session_directory: Path) -> SessionPaths:
+def load_session_paths(
+    session_directory: Path,
+    lickometer_csv: Path | None = None,
+) -> SessionPaths:
     """Find session files and paths for every Raspberry Pi directory."""
     if not session_directory.is_dir():
         raise NotADirectoryError(f"Session directory not found: {session_directory}")
@@ -59,9 +62,17 @@ def load_session_paths(session_directory: Path) -> SessionPaths:
             f"Expected one lickometer directory in {session_directory}, "
             f"found {len(lickometer_directories)}"
         )
-    lickometer_csv = _one_file(
-        lickometer_directories[0], "*.csv", "lickometer CSV"
-    )
+    if lickometer_csv is None:
+        lickometer_csv = _one_file(
+            lickometer_directories[0], "*.csv", "lickometer CSV"
+        )
+    elif (
+        not lickometer_csv.is_file()
+        or lickometer_csv.parent != lickometer_directories[0]
+    ):
+        raise FileNotFoundError(
+            f"Lickometer CSV not found in this session: {lickometer_csv}"
+        )
 
     pi_data_directories = [
         path

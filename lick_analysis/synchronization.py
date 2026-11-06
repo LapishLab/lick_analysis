@@ -170,3 +170,28 @@ def esp32_time_to_pi_time(
     return pd.Timestamp(
         base_pi_time + pd.to_timedelta(target_elapsed_s, unit="s")
     )
+
+
+def pi_times_to_esp32_times(
+    pi_times: pd.Series,
+    sync_table: pd.DataFrame,
+) -> np.ndarray:
+    """Map Pi wall-clock timestamps to ESP32 seconds using the video sync points."""
+    pi_sync_times = sync_table["pi_time"]
+    if len(pi_sync_times) < 2:
+        raise ValueError("At least two synchronization points are required")
+    origin = pi_sync_times.iloc[0]
+    pi_sync_s = (
+        (pi_sync_times - origin).dt.total_seconds().to_numpy(dtype=np.float64)
+    )
+    if np.any(np.diff(pi_sync_s) <= 0):
+        raise ValueError("Pi synchronization times must be strictly increasing")
+    esp32_sync_s = sync_table["esp32_time_s"].to_numpy(dtype=np.float64)
+    target_s = (pi_times - origin).dt.total_seconds().to_numpy(dtype=np.float64)
+
+    # Match esp32_time_to_pi_time, including linear extrapolation outside pulses.
+    left = np.clip(np.searchsorted(pi_sync_s, target_s) - 1, 0, len(pi_sync_s) - 2)
+    fraction = (target_s - pi_sync_s[left]) / (pi_sync_s[left + 1] - pi_sync_s[left])
+    return esp32_sync_s[left] + fraction * (
+        esp32_sync_s[left + 1] - esp32_sync_s[left]
+    )

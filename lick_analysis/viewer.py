@@ -14,7 +14,7 @@ from matplotlib.transforms import BboxBase
 from matplotlib.widgets import TextBox
 
 from .config import ViewerSettings
-from .synchronization import esp32_time_to_pi_time
+from .synchronization import esp32_time_to_pi_time, pi_times_to_esp32_times
 from .video import PiVideo
 
 
@@ -38,6 +38,7 @@ class LickometerViewer:
         videos: dict[str, PiVideo],
         settings: ViewerSettings,
         title: str,
+        lick_prediction: pd.DataFrame | None = None,
     ) -> None:
         if set(sync_tables) != set(videos):
             raise ValueError(
@@ -55,6 +56,7 @@ class LickometerViewer:
         self.time_values = capacitance["time_s"].to_numpy(dtype=np.float64)
         self.current_sample_index = 0
         self.video_lag_s = 0.0
+        self.lick_prediction = lick_prediction
 
         self.figure = plt.figure(figsize=(14, 9), constrained_layout=True)
         self.use_blitting = self.figure.canvas.supports_blit
@@ -96,6 +98,30 @@ class LickometerViewer:
 
         self.overview_axis.legend()
         self.zoom_axis.set_xlabel("Cumulative time (seconds)")
+        self.prediction_axis: Axes | None = None
+        self.prediction_line = None
+        if lick_prediction is not None:
+            if "fiber01lick" not in sync_tables:
+                raise ValueError("fiber01lick synchronization is required for predictions")
+            self.prediction_axis = self.zoom_axis.twinx()
+            self.prediction_axis.set(ylabel="Contact probability", ylim=(0, 1))
+            self.prediction_axis.set_zorder(self.zoom_axis.get_zorder() - 1)
+            self.zoom_axis.patch.set_visible(False)
+            (self.prediction_line,) = self.prediction_axis.plot(
+                pi_times_to_esp32_times(
+                    lick_prediction["pi_time"], sync_tables["fiber01lick"]
+                ),
+                lick_prediction["contact_probability"],
+                color="tab:green",
+                linewidth=1,
+                alpha=0.8,
+                label="Contact probability",
+            )
+            self.zoom_axis.legend(
+                [*self.zoom_axis.lines[:2], self.prediction_line],
+                ["Left", "Right", "Contact probability"],
+                loc="upper right",
+            )
 
         chosen_time_s = float(self.time_values[self.current_sample_index])
         self.recording_start_s = float(self.time_values[0])
@@ -353,7 +379,18 @@ class LickometerViewer:
             return
 
         self.video_lag_s = new_lag_s
+        if self.prediction_line is not None and self.lick_prediction is not None:
+            shifted_pi_times = self.lick_prediction["pi_time"] - pd.to_timedelta(
+                new_lag_s, unit="s"
+            )
+            self.prediction_line.set_xdata(
+                pi_times_to_esp32_times(
+                    shifted_pi_times, self.sync_tables["fiber01lick"]
+                )
+            )
         self.lag_text_box.ax.set_facecolor("white")
+        if self.prediction_line is not None:
+            self.figure.canvas.draw()
         self._update_chosen_sample(self.current_sample_index)
 
     def _choose_time_from_click(self, event: MouseEvent) -> None:
