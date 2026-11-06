@@ -19,7 +19,7 @@ problems = {
 }
 
 
-DEFAULT_ROOT_DIRECTORY = Path(r"C:\Users\daswyga\Desktop\fiber_lick")
+DEFAULT_ROOT_DIRECTORY = Path(r"/datastar/behavior_rooms/fiber/A/")
 DEFAULT_START = '2026-10-26'
 OUTPUT_FILENAME = "session_metadata.csv"
 LICK_CAMERA_CRASH_THRESHOLD_MS = 5 * 60 * 1000
@@ -78,15 +78,15 @@ def _camera_final_pts(pi_data_folders: list[Path], device_name: str) -> float | 
     return max(final_values) if final_values else None
 
 
-def _csv_has_data_rows(csv_path: Path) -> bool:
-    """Return whether a CSV contains at least one nonblank row after its header."""
+def _csv_data_row_count(csv_path: Path) -> int:
+    """Count nonblank data rows after the header in a CSV."""
     try:
         with csv_path.open("r", newline="", encoding="utf-8-sig") as csv_file:
             reader = csv.reader(csv_file)
             next(reader, None)  # Header
-            return any(any(value.strip() for value in row) for row in reader)
+            return sum(any(value.strip() for value in row) for row in reader)
     except (OSError, UnicodeError, csv.Error):
-        return False
+        return 0
 
 
 def find_session_problems(session_folder: Path) -> list[int]:
@@ -107,13 +107,13 @@ def find_session_problems(session_folder: Path) -> list[int]:
     if not fiber01lick_folders:
         problem_keys.append(1)
     else:
-        sync_csvs = [
-            csv_path
+        sync_entry_count = sum(
+            _csv_data_row_count(csv_path)
             for device_folder in fiber01lick_folders
             for csv_path in (device_folder / "gpio").glob("*.csv")
-            if csv_path.is_file() and _csv_has_data_rows(csv_path)
-        ]
-        if not sync_csvs:
+            if csv_path.is_file()
+        )
+        if sync_entry_count < 3:
             problem_keys.append(2)
 
     lickometer_csvs = [

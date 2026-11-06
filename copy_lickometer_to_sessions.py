@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-
+SESSION_ROOT = Path(r"/datastar/behavior_rooms/fiber/A/")
 LICKOMETER_FOLDER_NAME = "lickometer"
 EARLY_START_TOLERANCE = timedelta(minutes=5)
 LATE_START_TOLERANCE = timedelta(minutes=30)
@@ -193,7 +193,7 @@ def main() -> None:
         "session_root",
         nargs="?",
         type=Path,
-        default=Path(r"C:\Users\daswyga\Desktop\fiber_lick"),
+        default=Path(SESSION_ROOT),
         help="root containing session folders and the root lickometer folder",
     )
     args = parser.parse_args()
