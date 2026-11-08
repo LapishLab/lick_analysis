@@ -79,16 +79,21 @@ def load_session_paths(
         for path in session_directory.iterdir()
         if path.is_dir() and path.name.lower().startswith("pi-data")
     ]
-    if len(pi_data_directories) != 1:
+    if len(pi_data_directories) > 1:
         raise FileNotFoundError(
             f"Expected one pi-data directory in {session_directory}, "
             f"found {len(pi_data_directories)}"
         )
-    pi_data_directory = pi_data_directories[0]
+    pi_directory_parent = (
+        pi_data_directories[0] if pi_data_directories else session_directory
+    )
+    pi_directories_are_in_session = not pi_data_directories
 
     pis: dict[str, PiPaths] = {}
-    for pi_directory in sorted(pi_data_directory.iterdir()):
-        if not pi_directory.is_dir():
+    for pi_directory in sorted(pi_directory_parent.iterdir()):
+        if not pi_directory.is_dir() or (
+            pi_directories_are_in_session and pi_directory in lickometer_directories
+        ):
             continue
         gpio_csv = _optional_one_file(
             pi_directory / "gpio", "*.csv", "GPIO CSV"
@@ -102,7 +107,7 @@ def load_session_paths(
         )
 
     if not pis:
-        raise FileNotFoundError(f"No Pi directories found in {pi_data_directory}")
+        raise FileNotFoundError(f"No Pi directories found in {pi_directory_parent}")
 
     return SessionPaths(
         session_name=session_directory.name,
