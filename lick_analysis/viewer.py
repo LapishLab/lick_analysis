@@ -39,6 +39,7 @@ class LickometerViewer:
         settings: ViewerSettings,
         title: str,
         lick_prediction: pd.DataFrame | None = None,
+        lick_prediction_pi: str = "fiber01lick",
     ) -> None:
         if set(sync_tables) != set(videos):
             raise ValueError(
@@ -57,6 +58,7 @@ class LickometerViewer:
         self.current_sample_index = 0
         self.video_lag_s = 0.0
         self.lick_prediction = lick_prediction
+        self.lick_prediction_pi = lick_prediction_pi
 
         self.figure = plt.figure(figsize=(14, 9), constrained_layout=True)
         self.use_blitting = self.figure.canvas.supports_blit
@@ -101,15 +103,17 @@ class LickometerViewer:
         self.prediction_axis: Axes | None = None
         self.prediction_line = None
         if lick_prediction is not None:
-            if "fiber01lick" not in sync_tables:
-                raise ValueError("fiber01lick synchronization is required for predictions")
+            if lick_prediction_pi not in sync_tables:
+                raise ValueError(
+                    f"Prediction Pi {lick_prediction_pi!r} has no synchronization table"
+                )
             self.prediction_axis = self.zoom_axis.twinx()
             self.prediction_axis.set(ylabel="Contact probability", ylim=(0, 1))
             self.prediction_axis.set_zorder(self.zoom_axis.get_zorder() - 1)
             self.zoom_axis.patch.set_visible(False)
             (self.prediction_line,) = self.prediction_axis.plot(
                 pi_times_to_esp32_times(
-                    lick_prediction["pi_time"], sync_tables["fiber01lick"]
+                    lick_prediction["pi_time"], sync_tables[lick_prediction_pi]
                 ),
                 lick_prediction["contact_probability"],
                 color="tab:green",
@@ -385,7 +389,7 @@ class LickometerViewer:
             )
             self.prediction_line.set_xdata(
                 pi_times_to_esp32_times(
-                    shifted_pi_times, self.sync_tables["fiber01lick"]
+                    shifted_pi_times, self.sync_tables[self.lick_prediction_pi]
                 )
             )
         self.lag_text_box.ax.set_facecolor("white")

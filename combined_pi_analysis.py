@@ -11,30 +11,30 @@ from lick_analysis import (
     load_session_paths,
     open_pi_videos,
 )
-root = r"/datastar/behavior_rooms/fiber/A/"
-# f = r"2026-10-26_08-58-30_NAc_dlight_rat1" # Good but video cut short and no LED
-f = r"2026-10-28_15-47-49_NAc_dlight_rat2"
-# f = r"2026-10-28_14-06-18_NAc_dlight_rat6"
-# f = "2026-10-30_15-35-22_NAc_dlight_rat7"
-
-f = "2026-11-04_16-16-29_test_rat"
+# root = r"/datastar/behavior_rooms/fiber/A/"
+root = r"/datastar/behavior_rooms/lickometer/"
+f = "2026-11-05_12-06-58_lickometer_validation_hayes_2cap_rat31/"
+# f = "2026-11-05_12-36-44_lickometer_validation_hayes_2cap_rat32"
 
 
 EXAMPLE_DATA_DIR = Path(root + f)
-LICKOMETER_CSV = EXAMPLE_DATA_DIR / "lickometer/fiber01Lickometer_2026_10_28_155207.csv"
+# LICKOMETER_CSV = EXAMPLE_DATA_DIR / "lickometer/fiber01Lickometer_2026_10_28_155207.csv"
 
-LICK_PREDICTION = Path("/datastar/davidSwygart/labels/predictions/20261028_155145_422145_repaired.csv")
+# LICK_PREDICTION = Path("/datastar/davidSwygart/labels/predictions/20261028_155145_422145_repaired.csv")
+LICK_PREDICTION = Path(root + "/predictions/20261105_120729_126317.csv")
+LICK_PREDICTION_PI = "lick-test-01"
 # Set LICK_PREDICTION to None to hide the prediction trace.
+# Set LICK_PREDICTION_PI to the Pi whose video the predictions came from.
 
 # Configure each Pi by the name of its directory under pi-data*.
 PI_PARAMETERS = {
-    "fiber01": SyncParameters(pin=25),
-    "fiber01lick": SyncParameters(pin=16),
+    "lick-test-01": SyncParameters(pin=25),
 }
 
 
+
 def load_lick_prediction(csv_path: Path, video_path: Path) -> pd.DataFrame:
-    """Read per-frame predictions on the fiber01lick video's Pi clock."""
+    """Read per-frame predictions on the selected video's Pi clock."""
     data = pd.read_csv(csv_path)
     required = {"timestamp_ms", "contact_probability"}
     missing = required.difference(data.columns)
@@ -53,7 +53,7 @@ def load_lick_prediction(csv_path: Path, video_path: Path) -> pd.DataFrame:
 
 def main() -> None:
     viewer_settings = ViewerSettings()
-    paths = load_session_paths(EXAMPLE_DATA_DIR, lickometer_csv=LICKOMETER_CSV)
+    paths = load_session_paths(EXAMPLE_DATA_DIR)
     if not PI_PARAMETERS:
         raise ValueError("PI_PARAMETERS must name at least one Pi")
     missing_pis = set(PI_PARAMETERS).difference(paths.pis)
@@ -74,10 +74,13 @@ def main() -> None:
 
     prediction = None
     if LICK_PREDICTION is not None:
-        if "fiber01lick" not in camera_files:
-            raise ValueError("fiber01lick must be configured to plot lick predictions")
+        if LICK_PREDICTION_PI not in camera_files:
+            raise ValueError(
+                f"Prediction Pi {LICK_PREDICTION_PI!r} is not configured; "
+                f"choose one of {sorted(camera_files)}"
+            )
         prediction = load_lick_prediction(
-            LICK_PREDICTION, camera_files["fiber01lick"][0]
+            LICK_PREDICTION, camera_files[LICK_PREDICTION_PI][0]
         )
 
     videos = open_pi_videos(camera_files, viewer_settings)
@@ -89,6 +92,7 @@ def main() -> None:
             viewer_settings,
             title=paths.lickometer_csv.stem,
             lick_prediction=prediction,
+            lick_prediction_pi=LICK_PREDICTION_PI,
         )
     except Exception:
         for video in videos.values():
