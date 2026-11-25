@@ -60,7 +60,7 @@ def main() -> None:
     if missing_pis:
         raise ValueError(f"Configured Pis not found in session: {sorted(missing_pis)}")
 
-    capacitance = load_lickometer_data(paths.lickometer_csv)
+    capacitance = load_lickometer_data(paths.lickometer.csv)
     sync_tables = {}
     camera_files = {}
     for pi_name, parameters in PI_PARAMETERS.items():
@@ -90,7 +90,7 @@ def main() -> None:
             sync_tables,
             videos,
             viewer_settings,
-            title=paths.lickometer_csv.stem,
+            title=paths.lickometer.csv.stem,
             lick_prediction=prediction,
             lick_prediction_pi=LICK_PREDICTION_PI,
         )

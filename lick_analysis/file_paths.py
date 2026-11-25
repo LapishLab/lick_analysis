@@ -28,18 +28,25 @@ class PiPaths:
 
 
 @dataclass(frozen=True)
+class LickometerPaths:
+    """Lickometer recording path and metadata parsed from its filename."""
+
+    csv: Path | None
+    datetime: datetime | None
+    board_id: str | None
+
+
+@dataclass(frozen=True)
 class SessionPaths:
     """Session paths, keyed by the Raspberry Pi directory name."""
 
     session_name: str
     session_directory: Path
-    lickometer_csv: Path | None
+    lickometer: LickometerPaths
     pis: dict[str, PiPaths]
     med_pc_file: Path | None = None
     id: str | None = None
     session_datetime: datetime | None = None
-    lickometer_datetime: datetime | None = None
-    board_id: str | None = None
 
 
 def parse_session_datetime(session_name: str) -> datetime | None:
@@ -95,6 +102,13 @@ def find_lickometer_csv(session_directory: Path) -> Path | None:
     else:
         print(f'Found {len(matches)} lickometer files for {session_directory}. Setting to None')
         return None
+
+
+def get_lickometer_paths(session_directory: Path) -> LickometerPaths:
+    """Find the lickometer CSV and parse its board ID and timestamp."""
+    csv = find_lickometer_csv(session_directory)
+    board_id, recording_datetime = parse_lickometer_filename(csv)
+    return LickometerPaths(csv=csv, datetime=recording_datetime, board_id=board_id)
 
 def find_pi_root_dir(session_directory: Path) -> Path:
     pi_root = [p for p in session_directory.iterdir()
@@ -156,15 +170,11 @@ def load_session_paths(session_directory: Path) -> SessionPaths:
         raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
     id_match = SESSION_ID_PATTERN.search(session_directory.name)
-    lickometer_csv = find_lickometer_csv(session_directory)
-    board_id, lickometer_datetime = parse_lickometer_filename(lickometer_csv)
     return SessionPaths(
         session_name=session_directory.name,
         session_directory=session_directory,
-        lickometer_csv=lickometer_csv,
+        lickometer=get_lickometer_paths(session_directory),
         pis=pis,
         id=id_match.group(1).lower() if id_match else None,
         session_datetime=parse_session_datetime(session_directory.name),
-        lickometer_datetime=lickometer_datetime,
-        board_id=board_id,
     )

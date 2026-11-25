@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 from lick_analysis.file_paths import (
+    LickometerPaths,
+    get_lickometer_paths,
     load_session_paths,
     parse_lickometer_filename,
     parse_pi_datetime,
@@ -11,6 +13,22 @@ from lick_analysis.file_paths import (
 
 
 class SessionPathsTests(unittest.TestCase):
+    def test_lickometer_paths_handle_missing_and_invalid_filename(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session = Path(temporary_directory)
+            self.assertEqual(
+                get_lickometer_paths(session),
+                LickometerPaths(csv=None, datetime=None, board_id=None),
+            )
+
+            csv = session / "lickometer" / "trace.csv"
+            csv.parent.mkdir()
+            csv.touch()
+            self.assertEqual(
+                get_lickometer_paths(session),
+                LickometerPaths(csv=csv, datetime=None, board_id=None),
+            )
+
     def test_load_session_paths_extracts_recording_datetimes(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             session = Path(temporary_directory) / "2026-11-05_12-06-58_validation_rat31"
@@ -31,8 +49,10 @@ class SessionPathsTests(unittest.TestCase):
             self.assertEqual(paths.pis["fiber01"].video_datetime, datetime(2026, 11, 5, 12, 7, 29, 126317))
             self.assertEqual(paths.pis["fiber01"].gpio_datetime, datetime(2026, 11, 5, 12, 7, 28, 23100))
             self.assertEqual(paths.pis["fiber01"].audio_datetime, datetime(2026, 11, 5, 12, 7, 30, 1))
-            self.assertEqual(paths.lickometer_datetime, datetime(2026, 11, 5, 13, 8, 12))
-            self.assertEqual(paths.board_id, "test")
+            self.assertIsInstance(paths.lickometer, LickometerPaths)
+            self.assertEqual(paths.lickometer.csv, lickometer)
+            self.assertEqual(paths.lickometer.datetime, datetime(2026, 11, 5, 13, 8, 12))
+            self.assertEqual(paths.lickometer.board_id, "test")
 
     def test_recording_datetime_parsers_handle_missing_and_invalid_names(self):
         self.assertIsNone(parse_pi_datetime(None))
