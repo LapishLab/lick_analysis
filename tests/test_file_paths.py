@@ -1,11 +1,28 @@
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from lick_analysis.file_paths import load_session_paths
 
 
 class SessionPathsTests(unittest.TestCase):
+    def test_load_session_paths_extracts_datetime_from_session_name(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            for name, expected in (
+                ("2026-11-05_12-06-58_validation_rat31", datetime(2026, 11, 5, 12, 6, 58)),
+                ("2026-11-05_12-06-58", datetime(2026, 11, 5, 12, 6, 58)),
+                ("2026-11-05_validation_rat31", None),
+                ("2026-02-30_12-06-58_validation_rat31", None),
+                ("2026-11-05_25-06-58_validation_rat31", None),
+            ):
+                with self.subTest(name=name):
+                    session = root / name
+                    (session / "fiber01").mkdir(parents=True)
+                    (session / "lickometer").mkdir()
+                    self.assertEqual(load_session_paths(session).session_datetime, expected)
+
     def test_load_session_paths_extracts_id_from_session_name(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
