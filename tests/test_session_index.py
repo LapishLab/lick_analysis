@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from lick_analysis import generate_session_csv
+from lick_analysis.session_finder import CSV_FILENAME, DATA_DIRECTORY_FILENAME
 
 
 class GenerateSessionCsvTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class GenerateSessionCsvTests(unittest.TestCase):
             self.assertEqual(rows[0]["lick_camera_video_path"], "")
             self.assertEqual(rows[0]["top_camera_video_path"], str(top_video.relative_to(root)))
             self.assertEqual(
-                (root / "data_directory.txt").read_text(encoding="utf-8"),
+                (root / DATA_DIRECTORY_FILENAME).read_text(encoding="utf-8"),
                 f"{root.resolve()}\n",
             )
 
@@ -50,7 +51,7 @@ class GenerateSessionCsvTests(unittest.TestCase):
                 root, lick_camera_pi="lick-test-01", top_camera_pi="top-test-01"
             )
 
-            self.assertEqual(csv_path, root / "session_index.csv")
+            self.assertEqual(csv_path, root / CSV_FILENAME)
             with csv_path.open(newline="", encoding="utf-8") as csv_file:
                 rows = list(csv.DictReader(csv_file))
 
@@ -80,14 +81,14 @@ class GenerateSessionCsvTests(unittest.TestCase):
 
             csv_path = generate_session_csv(data_directory, output_directory=output_directory)
 
-            self.assertEqual(csv_path, output_directory / "session_index.csv")
+            self.assertEqual(csv_path, output_directory / CSV_FILENAME)
             with csv_path.open(newline="", encoding="utf-8") as csv_file:
                 rows = list(csv.DictReader(csv_file))
             self.assertEqual(rows[0]["capacitance_trace_path"], "")
             self.assertEqual(rows[0]["lick_camera_video_path"], "")
             self.assertEqual(rows[0]["top_camera_video_path"], "")
             self.assertEqual(
-                (output_directory / "data_directory.txt").read_text(encoding="utf-8"),
+                (output_directory / DATA_DIRECTORY_FILENAME).read_text(encoding="utf-8"),
                 f"{data_directory.resolve()}\n",
             )
 
