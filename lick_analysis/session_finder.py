@@ -14,7 +14,7 @@ DATA_DIRECTORY_FILENAME = "data_root.txt"
 @dataclass
 class Row:
     session: str
-    id: str
+    rat_id: str
     capacitance: str
     lick_video: str
     top_video: str
@@ -34,7 +34,7 @@ def generate_row(
 
     return Row(
         session=paths.session_name,
-        id=paths.id if paths.id is not None else "",
+        rat_id=paths.id if paths.id is not None else "",
         capacitance=relative_path(paths.lickometer_csv, session_directory),
         lick_video=relative_path(lick_pi.video, session_directory) if lick_pi else "",
         top_video=relative_path(top_pi.video, session_directory) if top_pi else "",
