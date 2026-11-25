@@ -23,7 +23,11 @@ class GenerateSessionCsvTests(unittest.TestCase):
                 rows = list(csv.DictReader(csv_file))
 
             self.assertEqual(rows[0]["lick_camera_video_path"], "")
-            self.assertEqual(rows[0]["top_camera_video_path"], str(top_video))
+            self.assertEqual(rows[0]["top_camera_video_path"], str(top_video.relative_to(root)))
+            self.assertEqual(
+                (root / "data_directory.txt").read_text(encoding="utf-8"),
+                f"{root.resolve()}\n",
+            )
 
     def test_indexes_sessions_with_selected_and_missing_cameras(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -54,17 +58,38 @@ class GenerateSessionCsvTests(unittest.TestCase):
             self.assertEqual(rows[0], {
                 "session_name": first.name,
                 "rat_id": "rat31",
-                "capacitance_trace_path": str(first / "lickometer" / "trace.csv"),
-                "lick_camera_video_path": str(first_lick_video),
-                "top_camera_video_path": str(first_top_video),
+                "capacitance_trace_path": str((first / "lickometer" / "trace.csv").relative_to(root)),
+                "lick_camera_video_path": str(first_lick_video.relative_to(root)),
+                "top_camera_video_path": str(first_top_video.relative_to(root)),
             })
             self.assertEqual(rows[1], {
                 "session_name": second.name,
                 "rat_id": "rat32",
-                "capacitance_trace_path": str(second / "lickometer" / "trace.csv"),
+                "capacitance_trace_path": str((second / "lickometer" / "trace.csv").relative_to(root)),
                 "lick_camera_video_path": "",
-                "top_camera_video_path": str(second_top_video),
+                "top_camera_video_path": str(second_top_video.relative_to(root)),
             })
+
+    def test_separate_output_directory_and_missing_lickometer(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            data_directory = root / "data"
+            session = data_directory / "2026-11-06_09-00-00_validation_rat33"
+            (session / "pi-data_001" / "fiber01").mkdir(parents=True)
+            output_directory = root / "output"
+
+            csv_path = generate_session_csv(data_directory, output_directory=output_directory)
+
+            self.assertEqual(csv_path, output_directory / "session_index.csv")
+            with csv_path.open(newline="", encoding="utf-8") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(rows[0]["capacitance_trace_path"], "")
+            self.assertEqual(rows[0]["lick_camera_video_path"], "")
+            self.assertEqual(rows[0]["top_camera_video_path"], "")
+            self.assertEqual(
+                (output_directory / "data_directory.txt").read_text(encoding="utf-8"),
+                f"{data_directory.resolve()}\n",
+            )
 
 
 if __name__ == "__main__":
