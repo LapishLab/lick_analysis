@@ -47,7 +47,36 @@ def find_pi_root_dir(session_directory: Path) -> Path:
         return pi_root[0]
     else:
         return session_directory          
-    
+
+def get_pi_paths(pi: Path) -> PiPaths:  
+            # find the GPIO CSV file
+        csv_dir = pi / "gpio"
+        matches = list(csv_dir.glob("*.csv"))
+        gpio_csv = matches[0] if len(matches) == 1 else None
+
+        # find the camera video file
+        video_dir = pi / "cam"
+        matches = list(video_dir.glob("*.mp4"))
+        video = matches[0] if len(matches) == 1 else None
+        video_pts = video.with_suffix(".pts") if video is not None else None
+        if video_pts is not None and not video_pts.is_file():
+            video_pts = None
+
+        # find the audio file
+        audio_dir = pi / "mic"
+        matches = list(audio_dir.glob("*.wav"))
+        audio = matches[0] if len(matches) == 1 else None
+        audio_csv = audio.with_suffix(".csv") if audio is not None else None
+        if audio_csv is not None and not audio_csv.is_file():
+            audio_csv = None
+
+        return PiPaths(
+            video=video, video_pts=video_pts, 
+            gpio_csv=gpio_csv, 
+            audio=audio, audio_csv=audio_csv
+        )
+
+
 def load_session_paths(session_directory: Path) -> SessionPaths:
     """Find session files and paths for every Raspberry Pi and lickometer."""
     if not session_directory.is_dir():
@@ -59,32 +88,7 @@ def load_session_paths(session_directory: Path) -> SessionPaths:
     for p in pi_root.iterdir():
         if p.name == 'lickometer' or not p.is_dir():
             continue
-
-        # find the GPIO CSV file
-        csv_dir = p / "gpio"
-        matches = list(csv_dir.glob("*.csv"))
-        gpio_csv = matches[0] if len(matches) == 1 else None
-
-        # find the camera video file
-        video_dir = p / "cam"
-        matches = list(video_dir.glob("*.mp4"))
-        video = matches[0] if len(matches) == 1 else None
-        video_pts = video.with_suffix(".pts") if video is not None else None
-        if video_pts is not None and not video_pts.is_file():
-            video_pts = None
-
-        # find the audio file
-        audio_dir = p / "mic"
-        matches = list(audio_dir.glob("*.wav"))
-        audio = matches[0] if len(matches) == 1 else None
-        audio_csv = audio.with_suffix(".csv") if audio is not None else None
-        if audio_csv is not None and not audio_csv.is_file():
-            audio_csv = None
-
-    
-        pis[p.name] = PiPaths(
-            video=video, video_pts=video_pts, gpio_csv=gpio_csv, audio=audio, audio_csv=audio_csv
-        )
+        pis[p.name] = get_pi_paths(p)
 
     if not pis:
         raise FileNotFoundError(f"No Pi directories found in {pi_root}")
