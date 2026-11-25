@@ -21,88 +21,77 @@ class SessionPaths:
 
     session_name: str
     session_directory: Path
-    lickometer_csv: Path
+    lickometer_csv: Path | None
     pis: dict[str, PiPaths]
     med_pc_file: Path | None = None
 
+def find_lickometer_csv(session_directory: Path) -> Path | None:
+    lickometer_directory = session_directory / "lickometer"
+    if not lickometer_directory.is_dir():
+        print(f"Lickometer directory not found in {session_directory.name}")
 
-def _one_file(directory: Path, pattern: str, description: str) -> Path:
-    matches = list(directory.glob(pattern))
-    if len(matches) != 1:
-        raise FileNotFoundError(
-            f"Expected one {description} in {directory}, found {len(matches)}"
-        )
-    return matches[0]
+    matches = list(lickometer_directory.glob("*.csv"))
+    if len(matches) == 1:
+        return matches[0]
+    else:
+        print(f'Found {len(matches)} lickometer files for {session_directory}. Setting to None')
+        return None
 
-
-def _optional_one_file(directory: Path, pattern: str, description: str) -> Path | None:
-    matches = list(directory.glob(pattern))
-    if len(matches) > 1:
-        raise RuntimeError(
-            f"Expected at most one {description} in {directory}, found {len(matches)}"
-        )
-    return matches[0] if matches else None
-
-
-def load_session_paths(
-    session_directory: Path,
-) -> SessionPaths:
-    """Find session files and paths for every Raspberry Pi directory."""
+def find_pi_root_dir(session_directory: Path) -> Path:
+    pi_root = [p for p in session_directory.iterdir()
+                if p.is_dir() and p.name.lower().startswith("pi-data")]
+    if len(pi_root) == 1:
+        return pi_root[0]
+    elif len(pi_root) > 1:
+        FileNotFoundError(f"Why are there more than 1 directory starting with pi-data for {session_directory.name}!?!")
+        return pi_root[0]
+    else:
+        return session_directory          
+    
+def load_session_paths(session_directory: Path) -> SessionPaths:
+    """Find session files and paths for every Raspberry Pi and lickometer."""
     if not session_directory.is_dir():
         raise NotADirectoryError(f"Session directory not found: {session_directory}")
 
-    lickometer_directories = [
-        path
-        for path in session_directory.iterdir()
-        if path.is_dir() and path.name.lower().startswith("lickometer")
-    ]
-    if len(lickometer_directories) != 1:
-        raise FileNotFoundError(
-            f"Expected one lickometer directory in {session_directory}, "
-            f"found {len(lickometer_directories)}"
-        )
-    lickometer_csv = _one_file(
-        lickometer_directories[0], "*.csv", "lickometer CSV"
-    )
-
-    pi_data_directories = [
-        path
-        for path in session_directory.iterdir()
-        if path.is_dir() and path.name.lower().startswith("pi-data")
-    ]
-    if len(pi_data_directories) > 1:
-        raise FileNotFoundError(
-            f"Expected one pi-data directory in {session_directory}, "
-            f"found {len(pi_data_directories)}"
-        )
-    pi_directory_parent = (
-        pi_data_directories[0] if pi_data_directories else session_directory
-    )
-    pi_directories_are_in_session = not pi_data_directories
+    pi_root = find_pi_root_dir(session_directory)
 
     pis: dict[str, PiPaths] = {}
-    for pi_directory in sorted(pi_directory_parent.iterdir()):
-        if not pi_directory.is_dir() or (
-            pi_directories_are_in_session and pi_directory in lickometer_directories
-        ):
+    for p in pi_root.iterdir():
+        if p.name == 'lickometer' or not p.is_dir():
             continue
-        gpio_csv = _optional_one_file(
-            pi_directory / "gpio", "*.csv", "GPIO CSV"
-        )
-        video = _optional_one_file(pi_directory / "cam", "*.mp4", "camera video")
+
+        # find the GPIO CSV file
+        csv_dir = p / "gpio"
+        matches = list(csv_dir.glob("*.csv"))
+        gpio_csv = matches[0] if len(matches) == 1 else None
+
+        # find the camera video file
+        video_dir = p / "cam"
+        matches = list(video_dir.glob("*.mp4"))
+        video = matches[0] if len(matches) == 1 else None
         video_pts = video.with_suffix(".pts") if video is not None else None
         if video_pts is not None and not video_pts.is_file():
             video_pts = None
-        pis[pi_directory.name] = PiPaths(
-            video=video, video_pts=video_pts, gpio_csv=gpio_csv
+
+        # find the audio file
+        audio_dir = p / "mic"
+        matches = list(audio_dir.glob("*.wav"))
+        audio = matches[0] if len(matches) == 1 else None
+        audio_csv = audio.with_suffix(".csv") if audio is not None else None
+        if audio_csv is not None and not audio_csv.is_file():
+            audio_csv = None
+
+    
+        pis[p.name] = PiPaths(
+            video=video, video_pts=video_pts, gpio_csv=gpio_csv, audio=audio, audio_csv=audio_csv
         )
 
     if not pis:
-        raise FileNotFoundError(f"No Pi directories found in {pi_directory_parent}")
+        raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
     return SessionPaths(
         session_name=session_directory.name,
         session_directory=session_directory,
-        lickometer_csv=lickometer_csv,
+        lickometer_csv=find_lickometer_csv(session_directory),
         pis=pis,
     )
