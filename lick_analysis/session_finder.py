@@ -36,8 +36,8 @@ def generate_row(
         session=paths.name,
         rat_id=paths.id if paths.id is not None else "",
         capacitance=relative_path(paths.lickometer.csv, session_directory) if paths.lickometer else "",
-        lick_video=relative_path(lick_pi.video, session_directory) if lick_pi else "",
-        top_video=relative_path(top_pi.video, session_directory) if top_pi else "",
+        lick_video=relative_path(lick_pi.camera.video, session_directory) if lick_pi and lick_pi.camera else "",
+        top_video=relative_path(top_pi.camera.video, session_directory) if top_pi and top_pi.camera else "",
     )
 
 def generate_session_csv(
