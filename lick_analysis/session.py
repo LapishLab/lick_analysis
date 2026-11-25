@@ -23,7 +23,7 @@ class Session:
     directory: Path
     name: str
     experiment: str
-    lickometer: Lickometer
+    lickometer: Lickometer | None
     pis: dict[str, Pi]
     med_pc_file: Path | None
     id: str
@@ -45,7 +45,10 @@ class Session:
         if not self.pis:
             raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
-        self.lickometer = Lickometer(directory / "lickometer")
+        try:
+            self.lickometer = Lickometer(directory / "lickometer")
+        except Exception:
+            self.lickometer = None
         self.med_pc_file = None
 
     def _find_pi_root(self) -> Path:

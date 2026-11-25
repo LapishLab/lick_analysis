@@ -35,7 +35,7 @@ def generate_row(
     return Row(
         session=paths.name,
         rat_id=paths.id if paths.id is not None else "",
-        capacitance=relative_path(paths.lickometer.csv, session_directory),
+        capacitance=relative_path(paths.lickometer.csv, session_directory) if paths.lickometer else "",
         lick_video=relative_path(lick_pi.video, session_directory) if lick_pi else "",
         top_video=relative_path(top_pi.video, session_directory) if top_pi else "",
     )
