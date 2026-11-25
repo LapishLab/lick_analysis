@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-SESSION_ROOT = Path(r"/datastar/behavior_rooms/fiber/A/")
+# SESSION_ROOT = Path(r"/datastar/behavior_rooms/fiber/A/")
+SESSION_ROOT = Path(r"/datastar/behavior_rooms/lickometer/")
 LICKOMETER_FOLDER_NAME = "lickometer"
 EARLY_START_TOLERANCE = timedelta(minutes=5)
 LATE_START_TOLERANCE = timedelta(minutes=30)
