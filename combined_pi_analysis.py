@@ -4,11 +4,11 @@ import pandas as pd
 
 from lick_analysis import (
     LickometerViewer,
+    Session,
     SyncParameters,
     ViewerSettings,
     build_pi_sync_lookup_tables,
     load_lickometer_data,
-    load_session_paths,
     open_pi_videos,
 )
 # root = r"/datastar/behavior_rooms/fiber/A/"
@@ -53,7 +53,7 @@ def load_lick_prediction(csv_path: Path, video_path: Path) -> pd.DataFrame:
 
 def main() -> None:
     viewer_settings = ViewerSettings()
-    paths = load_session_paths(EXAMPLE_DATA_DIR)
+    paths = Session(EXAMPLE_DATA_DIR)
     if not PI_PARAMETERS:
         raise ValueError("PI_PARAMETERS must name at least one Pi")
     missing_pis = set(PI_PARAMETERS).difference(paths.pis)
@@ -64,13 +64,13 @@ def main() -> None:
     sync_tables = {}
     camera_files = {}
     for pi_name, parameters in PI_PARAMETERS.items():
-        pi_paths = paths.pis[pi_name]
-        if pi_paths.gpio_csv is None:
+        pi = paths.pis[pi_name]
+        if pi.gpio_csv is None:
             raise FileNotFoundError(f"GPIO CSV not found for {pi_name}")
-        if pi_paths.video is None or pi_paths.video_pts is None:
+        if pi.video is None or pi.video_pts is None:
             raise FileNotFoundError(f"Video or frame timestamps not found for {pi_name}")
-        sync_tables[pi_name] = build_pi_sync_lookup_tables(pi_name, pi_paths.gpio_csv, capacitance, parameters)
-        camera_files[pi_name] = (pi_paths.video, pi_paths.video_pts)
+        sync_tables[pi_name] = build_pi_sync_lookup_tables(pi_name, pi.gpio_csv, capacitance, parameters)
+        camera_files[pi_name] = (pi.video, pi.video_pts)
 
     prediction = None
     if LICK_PREDICTION is not None:

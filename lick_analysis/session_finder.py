@@ -4,7 +4,7 @@ import csv
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-from .file_paths import load_session_paths
+from .session import Session
 
 
 CSV_FILENAME = "sessions.csv"
@@ -28,12 +28,12 @@ def generate_row(
     lick_camera_pi: str,
     top_camera_pi: str,
 ) -> Row:
-    paths = load_session_paths(session_directory)
+    paths = Session(session_directory)
     lick_pi = paths.pis.get(lick_camera_pi)
     top_pi = paths.pis.get(top_camera_pi)
 
     return Row(
-        session=paths.session_name,
+        session=paths.name,
         rat_id=paths.id if paths.id is not None else "",
         capacitance=relative_path(paths.lickometer.csv, session_directory),
         lick_video=relative_path(lick_pi.video, session_directory) if lick_pi else "",
@@ -48,7 +48,7 @@ def generate_session_csv(
 ) -> Path:
     """Index immediate session folders in ``data_directory``.
 
-    Camera arguments are Pi directory names, as used by ``load_session_paths``.
+    Camera arguments are Pi directory names, as used by ``Session``.
     Missing files produce empty CSV cells. File paths in the CSV are relative
     to ``data_directory``. By default, the CSV is written to ``data_directory``;
     pass ``output_directory`` to choose another destination. The destination
