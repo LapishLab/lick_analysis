@@ -8,6 +8,10 @@ from pathlib import Path
 
 SESSION_ID_PATTERN = re.compile(r"(?:^|_)(?:rat|group)([^_]*)(?=_|$)", re.IGNORECASE)
 SESSION_DATETIME_PATTERN = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_|$)")
+PI_DATETIME_PATTERN = re.compile(r"\d{8}_\d{6}(?:_\d{1,6})?")
+LICKOMETER_FILENAME_PATTERN = re.compile(
+    r"(?P<board_id>.+)_(?P<timestamp>\d{4}_\d{2}_\d{2}_\d{6})"
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +22,9 @@ class PiPaths:
     gpio_csv: Path | None
     audio: Path | None = None
     audio_csv: Path | None = None
+    video_datetime: datetime | None = None
+    gpio_datetime: datetime | None = None
+    audio_datetime: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,8 @@ class SessionPaths:
     med_pc_file: Path | None = None
     id: str | None = None
     session_datetime: datetime | None = None
+    lickometer_datetime: datetime | None = None
+    board_id: str | None = None
 
 
 def parse_session_datetime(session_name: str) -> datetime | None:
@@ -42,6 +51,38 @@ def parse_session_datetime(session_name: str) -> datetime | None:
         return datetime.strptime(match.group(1), "%Y-%m-%d_%H-%M-%S")
     except ValueError:
         return None
+
+
+def parse_pi_datetime(path: Path | None) -> datetime | None:
+    """Parse a Pi recording timestamp from its filename."""
+    if path is None or PI_DATETIME_PATTERN.fullmatch(path.stem) is None:
+        return None
+    try:
+        timestamp_format = (
+            "%Y%m%d_%H%M%S_%f"
+            if path.stem.count("_") == 2
+            else "%Y%m%d_%H%M%S"
+        )
+        return datetime.strptime(path.stem, timestamp_format)
+    except ValueError:
+        return None
+
+
+def parse_lickometer_filename(path: Path | None) -> tuple[str | None, datetime | None]:
+    """Return the board ID and recording time from a lickometer CSV name."""
+    if path is None:
+        return None, None
+    match = LICKOMETER_FILENAME_PATTERN.fullmatch(path.stem)
+    if match is None:
+        return None, None
+    try:
+        recording_datetime = datetime.strptime(
+            match["timestamp"], "%Y_%m_%d_%H%M%S"
+        )
+    except ValueError:
+        return None, None
+    return match["board_id"], recording_datetime
+
 
 def find_lickometer_csv(session_directory: Path) -> Path | None:
     lickometer_directory = session_directory / "lickometer"
@@ -91,7 +132,10 @@ def get_pi_paths(pi: Path) -> PiPaths:
         return PiPaths(
             video=video, video_pts=video_pts, 
             gpio_csv=gpio_csv, 
-            audio=audio, audio_csv=audio_csv
+            audio=audio, audio_csv=audio_csv,
+            video_datetime=parse_pi_datetime(video),
+            gpio_datetime=parse_pi_datetime(gpio_csv),
+            audio_datetime=parse_pi_datetime(audio),
         )
 
 
@@ -112,11 +156,15 @@ def load_session_paths(session_directory: Path) -> SessionPaths:
         raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
     id_match = SESSION_ID_PATTERN.search(session_directory.name)
+    lickometer_csv = find_lickometer_csv(session_directory)
+    board_id, lickometer_datetime = parse_lickometer_filename(lickometer_csv)
     return SessionPaths(
         session_name=session_directory.name,
         session_directory=session_directory,
-        lickometer_csv=find_lickometer_csv(session_directory),
+        lickometer_csv=lickometer_csv,
         pis=pis,
         id=id_match.group(1).lower() if id_match else None,
         session_datetime=parse_session_datetime(session_directory.name),
+        lickometer_datetime=lickometer_datetime,
+        board_id=board_id,
     )
