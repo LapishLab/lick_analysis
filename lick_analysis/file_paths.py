@@ -1,7 +1,11 @@
 """Locate the files belonging to a session and its Raspberry Pis."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+
+SESSION_ID_PATTERN = re.compile(r"(?:^|_)(?:rat|group)([^_]*)(?=_|$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class SessionPaths:
     lickometer_csv: Path | None
     pis: dict[str, PiPaths]
     med_pc_file: Path | None = None
+    id: str | None = None
 
 def find_lickometer_csv(session_directory: Path) -> Path | None:
     lickometer_directory = session_directory / "lickometer"
@@ -93,9 +98,11 @@ def load_session_paths(session_directory: Path) -> SessionPaths:
     if not pis:
         raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
+    id_match = SESSION_ID_PATTERN.search(session_directory.name)
     return SessionPaths(
         session_name=session_directory.name,
         session_directory=session_directory,
         lickometer_csv=find_lickometer_csv(session_directory),
         pis=pis,
+        id=id_match.group(1).lower() if id_match else None,
     )

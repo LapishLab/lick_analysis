@@ -1,7 +1,6 @@
 """Create a CSV index of recording sessions and their input files."""
 
 import csv
-import re
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
@@ -10,13 +9,12 @@ from .file_paths import load_session_paths
 
 CSV_FILENAME = "sessions.csv"
 DATA_DIRECTORY_FILENAME = "data_root.txt"
-RAT_ID_PATTERN = re.compile(r"(?:^|_)(rat\d+)$", re.IGNORECASE)
 
 
 @dataclass
 class Row:
     session_name: str
-    rat_id: str
+    id: str
     capacitance_trace_path: str
     lick_camera_video_path: str
     top_camera_video_path: str
@@ -27,7 +25,6 @@ def generate_row(
     top_camera_pi: str,
 ) -> Row:
     paths = load_session_paths(session_directory)
-    rat_match = RAT_ID_PATTERN.search(paths.session_name)
     lick_pi = paths.pis.get(lick_camera_pi)
     top_pi = paths.pis.get(top_camera_pi)
 
@@ -36,7 +33,7 @@ def generate_row(
 
     return Row(
         session_name=paths.session_name,
-        rat_id=rat_match.group(1).lower() if rat_match else "",
+        id=paths.id if paths.id is not None else "",
         capacitance_trace_path=relative_path(paths.lickometer_csv),
         lick_camera_video_path=relative_path(lick_pi.video) if lick_pi else "",
         top_camera_video_path=relative_path(top_pi.video) if top_pi else "",

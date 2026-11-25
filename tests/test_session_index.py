@@ -4,10 +4,23 @@ import unittest
 from pathlib import Path
 
 from lick_analysis import generate_session_csv
-from lick_analysis.session_finder import CSV_FILENAME, DATA_DIRECTORY_FILENAME
+from lick_analysis.session_finder import CSV_FILENAME, DATA_DIRECTORY_FILENAME, generate_row
 
 
 class GenerateSessionCsvTests(unittest.TestCase):
+    def test_row_uses_empty_id_for_missing_or_empty_session_id(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            for name in ("2026-11-05_validation", "2026-11-05_rat_validation"):
+                with self.subTest(name=name):
+                    session = root / name
+                    (session / "fiber01").mkdir(parents=True)
+                    lickometer_csv = session / "lickometer" / "trace.csv"
+                    lickometer_csv.parent.mkdir()
+                    lickometer_csv.touch()
+                    row = generate_row(session, "fiber01lick", "fiber01")
+                    self.assertEqual(row.id, "")
+
     def test_default_pi_names_allow_missing_video(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -34,7 +47,7 @@ class GenerateSessionCsvTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             first = root / "2026-11-05_12-06-58_validation_rat31"
-            second = root / "2026-11-05_12-36-44_validation_rat32"
+            second = root / "2026-11-05_12-36-44_groupAlpha_validation"
             for session in (first, second):
                 (session / "lickometer").mkdir(parents=True)
                 (session / "lickometer" / "trace.csv").touch()
@@ -58,14 +71,14 @@ class GenerateSessionCsvTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0], {
                 "session_name": first.name,
-                "rat_id": "rat31",
+                "id": "31",
                 "capacitance_trace_path": str((first / "lickometer" / "trace.csv").relative_to(root)),
                 "lick_camera_video_path": str(first_lick_video.relative_to(root)),
                 "top_camera_video_path": str(first_top_video.relative_to(root)),
             })
             self.assertEqual(rows[1], {
                 "session_name": second.name,
-                "rat_id": "rat32",
+                "id": "alpha",
                 "capacitance_trace_path": str((second / "lickometer" / "trace.csv").relative_to(root)),
                 "lick_camera_video_path": "",
                 "top_camera_video_path": str(second_top_video.relative_to(root)),
