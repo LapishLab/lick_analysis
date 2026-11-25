@@ -13,11 +13,15 @@ DATA_DIRECTORY_FILENAME = "data_root.txt"
 
 @dataclass
 class Row:
-    session_name: str
+    session: str
     id: str
-    capacitance_trace_path: str
-    lick_camera_video_path: str
-    top_camera_video_path: str
+    capacitance: str
+    lick_video: str
+    top_video: str
+
+def relative_path(path: Path | None, base: Path) -> str:
+    """Return a path relative to ``base``, or an empty string if ``path`` is None."""
+    return str(path.relative_to(base)) if path is not None else ""
 
 def generate_row(
     session_directory: Path,
@@ -28,15 +32,12 @@ def generate_row(
     lick_pi = paths.pis.get(lick_camera_pi)
     top_pi = paths.pis.get(top_camera_pi)
 
-    def relative_path(path: Path | None) -> str:
-        return str(path.relative_to(session_directory.parent)) if path is not None else ""
-
     return Row(
-        session_name=paths.session_name,
+        session=paths.session_name,
         id=paths.id if paths.id is not None else "",
-        capacitance_trace_path=relative_path(paths.lickometer_csv),
-        lick_camera_video_path=relative_path(lick_pi.video) if lick_pi else "",
-        top_camera_video_path=relative_path(top_pi.video) if top_pi else "",
+        capacitance=relative_path(paths.lickometer_csv, session_directory),
+        lick_video=relative_path(lick_pi.video, session_directory) if lick_pi else "",
+        top_video=relative_path(top_pi.video, session_directory) if top_pi else "",
     )
 
 def generate_session_csv(
