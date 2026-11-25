@@ -21,6 +21,7 @@ RAT_ID_PATTERN = re.compile(r"(?:^|_)(rat\d+)$", re.IGNORECASE)
 def generate_session_csv(
     data_directory: Path | str,
     *,
+    output_directory: Path | str | None = None,
     lick_camera_pi: str = "fiber01lick",
     top_camera_pi: str = "fiber01",
 ) -> Path:
@@ -28,7 +29,9 @@ def generate_session_csv(
 
     Camera arguments are Pi directory names, as used by ``load_session_paths``.
     A missing Pi or camera video produces an empty CSV cell. Paths in the CSV
-    are absolute, and the returned file is ``data_directory/session_index.csv``.
+    are absolute. By default, the CSV is written to ``data_directory``; pass
+    ``output_directory`` to choose another destination. The destination is
+    created if needed, and the returned path points to the written CSV.
     """
     data_directory = Path(data_directory).resolve()
     if not data_directory.is_dir():
@@ -55,8 +58,11 @@ def generate_session_csv(
                 "top_camera_video_path": str(top_pi.video) if top_pi and top_pi.video else "",
             }
         )
-
-    output_path = data_directory / CSV_FILENAME
+    if output_directory is None:
+        output_directory = data_directory
+    output_directory = Path(output_directory).expanduser()
+    output_directory.mkdir(parents=True, exist_ok=True)
+    output_path = output_directory / CSV_FILENAME
     with output_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=CSV_COLUMNS)
         writer.writeheader()
