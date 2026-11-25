@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -13,21 +12,18 @@ LICKOMETER_FILENAME_PATTERN = re.compile(
 )
 
 
-@dataclass(frozen=True)
 class Lickometer:
     """A lickometer recording file and metadata parsed from its filename."""
 
     directory: Path
-    csv: Path | None = field(init=False)
-    datetime: datetime | None = field(init=False)
-    board_id: str | None = field(init=False)
+    csv: Path | None
+    datetime: datetime | None
+    board_id: str | None
 
-    def __post_init__(self) -> None:
-        csv = self._find_csv()
-        board_id, recording_datetime = self.parse_filename(csv)
-        object.__setattr__(self, "csv", csv)
-        object.__setattr__(self, "datetime", recording_datetime)
-        object.__setattr__(self, "board_id", board_id)
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+        self.csv = self._find_csv()
+        self.board_id, self.datetime = self.parse_filename(self.csv)
 
     def _find_csv(self) -> Path | None:
         if not self.directory.is_dir():

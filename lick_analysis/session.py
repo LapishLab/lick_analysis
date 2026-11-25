@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -18,39 +17,36 @@ SESSION_NAME_PATTERN = re.compile(
 )
 
 
-@dataclass(frozen=True)
 class Session:
     """A session's recording files and metadata, keyed by Pi directory name."""
 
     directory: Path
-    name: str = field(init=False)
-    experiment: str = field(init=False)
-    lickometer: Lickometer = field(init=False)
-    pis: dict[str, Pi] = field(init=False)
-    med_pc_file: Path | None = field(default=None, init=False)
-    id: str = field(init=False)
-    datetime: datetime = field(init=False)
+    name: str
+    experiment: str
+    lickometer: Lickometer
+    pis: dict[str, Pi]
+    med_pc_file: Path | None
+    id: str
+    datetime: datetime
 
-    def __post_init__(self) -> None:
-        if not self.directory.is_dir():
-            raise NotADirectoryError(f"Session directory not found: {self.directory}")
+    def __init__(self, directory: Path) -> None:
+        if not directory.is_dir():
+            raise NotADirectoryError(f"Session directory not found: {directory}")
 
-        session_datetime, experiment, session_id = self.parse_name(self.directory.name)
+        self.directory = directory
+        self.name = directory.name
+        self.datetime, self.experiment, self.id = self.parse_name(self.name)
         pi_root = self._find_pi_root()
-        pis = {
+        self.pis = {
             p.name: Pi(p)
             for p in pi_root.iterdir()
             if p.is_dir() and p.name != "lickometer"
         }
-        if not pis:
+        if not self.pis:
             raise FileNotFoundError(f"No Pi directories found in {pi_root}")
 
-        object.__setattr__(self, "name", self.directory.name)
-        object.__setattr__(self, "experiment", experiment)
-        object.__setattr__(self, "lickometer", Lickometer(self.directory / "lickometer"))
-        object.__setattr__(self, "pis", pis)
-        object.__setattr__(self, "id", session_id)
-        object.__setattr__(self, "datetime", session_datetime)
+        self.lickometer = Lickometer(directory / "lickometer")
+        self.med_pc_file = None
 
     def _find_pi_root(self) -> Path:
         pi_roots = [
