@@ -20,6 +20,19 @@ class Row:
     lick_camera_video_path: str
     top_camera_video_path: str
 
+def generate_row(session_directory: Path, lick_camera_pi: str, top_camera_pi: str) -> Row:
+    paths = load_session_paths(session_directory)
+    rat_match = RAT_ID_PATTERN.search(paths.session_name)
+    lick_pi = paths.pis.get(lick_camera_pi)
+    top_pi = paths.pis.get(top_camera_pi)
+    return Row(
+        session_name=paths.session_name,
+        rat_id=rat_match.group(1).lower() if rat_match else "",
+        capacitance_trace_path=str(paths.lickometer_csv),
+        lick_camera_video_path=str(lick_pi.video) if lick_pi and lick_pi.video else "",
+        top_camera_video_path=str(top_pi.video) if top_pi and top_pi.video else "",
+    )
+
 def generate_session_csv(
     data_directory: Path | str,
     *,
@@ -40,26 +53,14 @@ def generate_session_csv(
         raise NotADirectoryError(f"Data directory not found: {data_directory}")
 
     rows = []
-    for session_directory in sorted(data_directory.iterdir(), key=lambda path: path.name.lower()):
-        if not session_directory.is_dir() or not any(
-            child.is_dir() and child.name.lower().startswith("lickometer")
-            for child in session_directory.iterdir()
-        ):
+    sessions = data_directory.iterdir()
+    sessions  = sorted(sessions, key=lambda path: path.name.lower())
+    for session in sessions:
+        if not session.is_dir():
             continue
+        r = generate_row(session, lick_camera_pi, top_camera_pi)
+        rows.append(r)
 
-        paths = load_session_paths(session_directory)
-        rat_match = RAT_ID_PATTERN.search(paths.session_name)
-        lick_pi = paths.pis.get(lick_camera_pi)
-        top_pi = paths.pis.get(top_camera_pi)
-        rows.append(
-            Row(
-                session_name=paths.session_name,
-                rat_id=rat_match.group(1).lower() if rat_match else "",
-                capacitance_trace_path=str(paths.lickometer_csv),
-                lick_camera_video_path=str(lick_pi.video) if lick_pi and lick_pi.video else "",
-                top_camera_video_path=str(top_pi.video) if top_pi and top_pi.video else "",
-            )
-        )
     if output_directory is None:
         output_directory = data_directory
     output_directory = Path(output_directory).expanduser()
